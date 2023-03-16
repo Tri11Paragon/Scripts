@@ -12,9 +12,14 @@ This lovely python script allows you to fetch ip address form cloudflare dns rec
 }
 ```
 The script has many useful featues:
-- `python3 dns_fetch.py -a -n -i` which will return only the ip address of the A record corresponding to default_name.
-    - This can be used in bash commands: `ssh username@$(python3 dns_fetch.py -a -n -i)`
-- `python3 dns_fetch.py -a` will return all A records
-- `python3 dns_fetch.py -c` will return all CNAME records
-- `python3 dns_fetch.py` will print the raw json from cloudflare
-- `python3 dns_fetch.py -n` will print all records corresponding to default_name
+- `python3 dns_fetch.py -a -n -i` 
+    - Returns only the ip address of the A record corresponding to default_name.
+        - This can be used in bash commands: `ssh username@$(python3 dns_fetch.py -a -n -i)`
+- `python3 dns_fetch.py -a` 
+    - Returns all A records
+- `python3 dns_fetch.py -c`
+    - Returns all CNAME records
+- `python3 dns_fetch.py`
+    - Prints the raw json from cloudflare
+- `python3 dns_fetch.py -n`
+    - Prints all records corresponding to default_name

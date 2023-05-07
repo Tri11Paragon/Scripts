@@ -41,3 +41,7 @@ The file is a json file with 3 possible attributes
     - Prints the raw json from cloudflare
 - `python3 dns_fetch.py -n`
     - Prints all records corresponding to default_name
+
+# site_gen.py
+---
+Allows you to easily generate and install nginx site configs.

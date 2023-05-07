@@ -1,7 +1,7 @@
 #!/bin/python3
 
 import argparse
-import os
+import subprocess
 
 parser = argparse.ArgumentParser(prog='Site Generator', description='Apache/Nginx Site Generator', epilog='Currently Only For Nginx')
 
@@ -10,12 +10,14 @@ parse_type_group = parser.add_mutually_exclusive_group()
 parse_type_group.add_argument('-p', '--proxy', action='store_true', help="Generate a site which will act as a proxy")
 parse_type_group.add_argument('-r', '--root', action='store_true', help="Generate a site which serves from a document root")
 
-parser.add_argument('-i', '--install', default="/etc/nginx/sites-available/")
-parser.add_argument('-l', '--log', default="/var/log/nginx/")
+parser.add_argument('-i', '--install', default="/etc/nginx/sites-available/", help="Set the install location for the generated config, defaults to /etc/nginx/sites-available/")
+parser.add_argument('-l', '--log', default="/var/log/nginx/", help="Set the default log location for the generated config, defaults to /var/log/nginx/")
+parser.add_argument('-s', '--symb', default="/etc/nginx/sites-enabled/", help="Set the location for the symbolic link to enable the config")
 
 args = parser.parse_args()
 
 install_location = args.install
+link_location = args.symb
 log_location = args.log
 
 if not install_location.endswith('/'):
@@ -39,8 +41,14 @@ site['name'] = inputprint("Enter site address (eg: 'tpgc.me')")
 def greenprint(p):
 	print("\033[92m" + p + "\033[0m")
 
+def get_config_name():
+	return site['name']
+
+def get_config_path():
+	return install_location + get_config_name()
+
 def create_file():
-	return open(install_location + site['name'], 'a')
+	return open(get_config_path(), 'a')
 
 def create_nginx():
 	f = create_file()
@@ -56,6 +64,7 @@ def end_nginx(f):
 	f.write("}\n")
 	f.write("#--- --- --- {End Site " + site['name'] + "} --- --- ---#\n\n")
 	f.close()
+	subprocess.run(["ln", "-s", get_config_path(), link_location + get_config_name()])
 
 def write_location(f, loc, mod):
 	f.write("	location " + loc + " {\n")

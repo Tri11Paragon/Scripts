@@ -174,6 +174,10 @@ def process_page(url):
     soup = open_url(url)
     ref = soup.find("div", class_="refentry")
 
+    if ref is None:
+        print("NULL")
+        return
+
     name_div = ref.find("div", class_="refnamediv")
     cspec_div = ref.find("div", class_="refsynopsisdiv").find("div", class_="funcsynopsis")
     parameters_div = ref.find("div", id="parameters")

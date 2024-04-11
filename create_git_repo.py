@@ -11,7 +11,7 @@ parser = argparse.ArgumentParser(
                     epilog='Hello')
 
 parser.add_argument('repo_name')
-parser.add_argument('-e', help="environment file", required=False, default=None)
+parser.add_argument('-e', help="environment file", required=False, default="~/.brett_scripts.env")
 parser.add_argument('-d', '--description', default = "")
 
 args = parser.parse_args()
@@ -19,7 +19,7 @@ args = parser.parse_args()
 github_token = ''
 gitea_token = ''
 
-if args.e is not None:
+if (args.e is not None) and not (args.e == 'env'):
 	f = open(args.e, "rt")
 	values = {}
 	for line in f:

@@ -2,6 +2,7 @@
 
 import argparse
 import subprocess
+import color_io
 
 parser = argparse.ArgumentParser(prog='Site Generator', description='Apache/Nginx Site Generator', epilog='Currently Only For Nginx')
 
@@ -25,21 +26,8 @@ if not install_location.endswith('/'):
 if not log_location.endswith('/'):
 	log_location = log_location + "/"
 
-def inputprint(p, default = ""):
-	print("\033[93m" + p, end=':\033[0m ', flush=True)
-	inp = input("")
-	if inp:
-		return inp
-	else:
-		if not default:
-			return inputprint(p, default)
-		return default
-
 site = {}
-site['name'] = inputprint("Enter site address (eg: 'tpgc.me')")
-
-def greenprint(p):
-	print("\033[92m" + p + "\033[0m")
+site['name'] = color_io.input_print("Enter site address (eg: 'tpgc.me')")
 
 def get_config_name():
 	return site['name']
@@ -73,10 +61,10 @@ def write_location(f, loc, mod):
 	f.write("	}\n\n")
 
 def create_proxy():
-	greenprint("Creating proxy site")
-	site['location'] = inputprint("Enter site location (default '/')", "/")
-	site['address'] = inputprint("Enter address to proxy to (default: http://127.0.0.1)", "http://127.0.0.1")
-	site['port'] = inputprint("Enter port")
+	color_io.green_print("Creating proxy site")
+	site['location'] = color_io.input_print("Enter site location (default '/')", "/")
+	site['address'] = color_io.input_print("Enter address to proxy to (default: http://127.0.0.1)", "http://127.0.0.1")
+	site['port'] = color_io.input_print("Enter port")
 	f = create_nginx()
 	write_location(f, site['location'], ["proxy_pass " + site['address'] + ":" + site['port'],
 				"proxy_set_header Upgrade $http_upgrade",
@@ -85,8 +73,8 @@ def create_proxy():
 	end_nginx(f)
 
 def create_root():
-	greenprint("Creating root site")
-	site['path'] = inputprint("Enter site files path")
+	color_io.green_print("Creating root site")
+	site['path'] = color_io.input_print("Enter site files path")
 	f = create_nginx()
 	f.write("	root " + site['path'] + ";\n\n");
 	f.write("	include php-fpm;\n\n");

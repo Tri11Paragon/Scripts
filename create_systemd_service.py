@@ -2,7 +2,7 @@
 
 import argparse
 import subprocess
-import color_io
+import util.color_io as color_io
 import sys
 
 parser = argparse.ArgumentParser(prog='SystemD Service Generator', description='SystemD Service Unit File Generator', epilog='Meow')

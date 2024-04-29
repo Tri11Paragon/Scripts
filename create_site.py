@@ -2,7 +2,7 @@
 
 import argparse
 import subprocess
-import color_io
+import util.color_io as color_io
 
 parser = argparse.ArgumentParser(prog='Site Generator', description='Apache/Nginx Site Generator', epilog='Currently Only For Nginx')
 

@@ -8,6 +8,11 @@ import sys
 parser = argparse.ArgumentParser(prog='SystemD Service Generator', description='SystemD Service Unit File Generator', epilog='Meow')
 
 parser.add_argument("-i", "--install", nargs='?', const="/etc/systemd/system/", default=None)
+parser.add_argument("-r", "--restart", default="on-failure")
+parser.add_argument("-w", "--wanted", default="multi-user.target")
+parser.add_argument("-d", "--working_dir", default=None)
+parser.add_argument("-u", "--user", default=None)
+parser.add_argument('-g', "--group", default=None)
 parser.add_argument("service_name", required=("--install" in sys.argv or "-i" in sys.argv), default=None)
 
 args = parser.parse_args()
@@ -27,6 +32,23 @@ def bprint(*args, **kwargs):
     print(*args, file=f, **kwargs)
 
 if __name__ == "__main__":
+    description = color_io.input_print("Please enter description")
+    exec_string = color_io.input_print("Please enter execution string")
     bprint("[Unit]")
-    description = color_io.input_print("Please enter description: ")
-    bprint("")
+    bprint("Description=" + description)
+    bprint()
+    bprint("[Service]")
+    bprint("Type=exec")
+    if args.working_dir is not None:
+        bprint("WorkingDirectory=" + args.working_dir)
+    if args.user is not None:
+        bprint("User=" + args.user)
+    if args.group is not None:
+        bprint("Group=" + args.group)
+    bprint("ExecStart=" + exec_string)
+    bprint("RestartSec=1s")
+    bprint("Restart=" + args.restart)
+    bprint("OOMPolicy=stop")
+    bprint()
+    bprint("[Install]")
+    bprint("WantedBy=" + args.wanted)

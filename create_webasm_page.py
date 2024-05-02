@@ -16,6 +16,7 @@ args = parser.parse_args()
 f = sys.stdout
 
 html_base = """
+<!DOCTYPE html>
 <html>
     <head>
         <meta charset="utf-8">

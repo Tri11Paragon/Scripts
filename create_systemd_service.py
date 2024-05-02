@@ -13,7 +13,8 @@ parser.add_argument("-w", "--wanted", default="multi-user.target")
 parser.add_argument("-d", "--working_dir", default=None)
 parser.add_argument("-u", "--user", default=None)
 parser.add_argument('-g', "--group", default=None)
-parser.add_argument("service_name", required=("--install" in sys.argv or "-i" in sys.argv), default=None)
+if "--install" in sys.argv or "-i" in sys.argv:
+    parser.add_argument("service_name", default=None)
 
 args = parser.parse_args()
 

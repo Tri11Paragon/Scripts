@@ -15,3 +15,6 @@ def input_print(p, default = ""):
 
 def green_print(p):
     eprint("\033[92m" + p + "\033[0m")
+    
+def red_print(p):
+    eprint("\033[31m" + p + "\033[0m")

@@ -10,8 +10,10 @@ import subprocess
 import create_git_repo as repo
 import util.color_io as io
 
-git_ignore = """
-cmake-build*/
+scripts_dir = "/home/brett/Documents/code/scripts"
+github_url = "https://github.com/Tri11Paragon/"
+
+git_ignore = """cmake-build*/
 build/
 out/
 ./cmake-build*/
@@ -19,9 +21,8 @@ out/
 ./out/
 """
 
-cmake_exec_default_text = """"
-cmake_minimum_required(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})
-project(${PROJECT_NAME})
+cmake_exec_default_text = """cmake_minimum_required(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})
+project(${PROJECT_NAME} VERSION 0.0.1)
 
 option(ENABLE_ADDRSAN "Enable the address sanitizer" OFF)
 option(ENABLE_UBSAN "Enable the ub sanitizer" OFF)
@@ -57,8 +58,7 @@ if (${ENABLE_TSAN} MATCHES ON)
 endif ()
 """
 
-cmake_lib_default_text = """"
-cmake_minimum_required(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})
+cmake_lib_default_text = """cmake_minimum_required(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})
 project(${PROJECT_NAME})
 
 option(ENABLE_ADDRSAN "Enable the address sanitizer" OFF)
@@ -95,10 +95,19 @@ if (${ENABLE_TSAN} MATCHES ON)
 endif ()
 """
 
+default_main_file = """#include <iostream>
+
+int main()
+{
+    std::cout << "Hello World!" << std::endl;    
+}
+"""
+
 parser = argparse.ArgumentParser(prog='Bargo', description='Cargo but bad, for C++', epilog='Meow :3')
-parser.add_argument("--cmake", "-c", default=None, help="Specify CMake version, defaults to using version installed on the system")
-parser.add_argument("--cpp", "-p", default="17", help="C++ Version")
+parser.add_argument("--cmake", default=None, help="Specify CMake version, defaults to using version installed on the system")
+parser.add_argument("--cpp", "-p", default="17", help="C++ Version, defaults to C++17")
 parser.add_argument("--no_git", default=True, action="store_false", help="Disables creating a git repo")
+parser.add_argument("--create_git", "-c", nargs='?', const=True, default=False, help="Create the associated git repo", metavar="DESCRIPTION")
 parser.add_argument("--no_blt", default=True, action="store_false", help="Disables init with BLT")
 parser.add_argument("--lib", action="store_true", help="Create a lib instead of an exec")
 parser.add_argument("--graphics", "-g", default=False, action="store_true", help="Init with graphics in mind, ie use BLT With Graphics")
@@ -108,18 +117,24 @@ parser.add_argument("name", help="Project Name")
 
 args = parser.parse_args()
 
-def open_process(command):
+def open_process(command, print_out = True):
     process = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     stdout, stderr = process.communicate()
     exit_code = process.wait()
+    str_out = stdout.decode('utf8')
+    str_err = stderr.decode('utf8')
+    if print_out and len(str_out) > 0:
+        print(str_out, end='')
+    if print_out and len(str_err) > 0:
+        print(str_err, end='')
     #print(stdout, stderr, exit_code)
     return (stdout, stderr, exit_code)
 
 def get_cmake_version():
     cmake_output, _, _ = open_process(["cmake", "--version"])
 
-    cmake_lines = cmake_output.splitlines()
-    cmake_version = str(cmake_lines[0]).split("version ")[1][0:-1].split('.')
+    cmake_lines = cmake_output.decode('utf8').splitlines()
+    cmake_version = str(cmake_lines[0]).split("version ")[1].split('.')
 
     cmake_major = cmake_version[0]
     cmake_minor = cmake_version[1]
@@ -129,23 +144,35 @@ def get_cmake_version():
 def setup_dirs():
     open_process(["mkdir", "include", "src", "lib"])
     
-def setup_blt(use_git, blt_url):
+def setup_blt(use_git, blt_url, blt_path):
     if use_git:
-        open_process(["git", "submodule", "add", blt_url, "lib/blt"])
+        open_process(["git", "submodule", "add", blt_url, "lib/" + blt_path])
         open_process(["git", "submodule", "update", "--remote", "--init", "--recursive"])
     else:
-        open_process(["git", "clone", "--recursive", blt_url, "lib/blt"])
+        open_process(["git", "clone", "--recursive", blt_url, "lib/" + blt_path])
     
 def create_git_ignore():
     with open(".gitignore", "w") as f:
         f.write(git_ignore)
-    
+
 cmake_major, cmake_minor = get_cmake_version()
 cpp_version = args.cpp
 use_blt = args.no_blt
 use_git = args.no_git
 blt_url = "https://github.com/Tri11Paragon/BLT.git"
+blt_path = "blt"
+blt_lib = "BLT"
 cmake_text = cmake_exec_default_text
+project_name = args.name.replace(" ", "-").replace("_", "-")
+sub_dirs = ""
+links = ""
+
+open_process(["mkdir", project_name])
+wd = os.getcwd()
+if not wd.endswith('/'):
+    wd += "/"
+wd += project_name
+os.chdir(wd);
 
 if args.lib:
     cmake_text = cmake_lib_default_text
@@ -160,4 +187,44 @@ if args.cmake:
 
 if args.graphics:
     blt_url = "https://git.tpgc.me/tri11paragon/BLT-With-Graphics-Template"
+    blt_path = "blt-with-graphics"
+    blt_lib = "BLT_WITH_GRAPHICS"
+    
+open_process(["cp", scripts_dir + "/commit.py", "./"]);
+
+setup_dirs()
+
+if use_git:
+    open_process(["git", "init"])
+    open_process(["git", "branch", "-M", "main"])
+    create_git_ignore()
+
+if use_blt:
+    setup_blt(use_git=use_git, blt_url=blt_url, blt_path=blt_path)
+    sub_dirs += "add_subdirectory(lib/" + blt_path + ")"
+    links += "target_link_libraries(${PROJECT_NAME} PRIVATE " + blt_lib + ")"
+
+if args.create_git:
+    desc = ""
+    if isinstance(args.create_git, str):
+        desc = args.create_git
+    open_process(["create_git_repo", "-d", desc, project_name])
+    if not github_url.endswith("/"):
+        github_url += "/"
+    open_process(["git", "remote", "add", "origin", github_url + project_name])
+    
+cmake_text = cmake_text.replace("${SUB_DIRS}", sub_dirs)
+cmake_text = cmake_text.replace("${LINKS}", links)
+cmake_text = cmake_text.replace("${CMAKE_MAJOR_VERSION}", cmake_major)
+cmake_text = cmake_text.replace("${CMAKE_MINOR_VERSION}", cmake_minor)
+cmake_text = cmake_text.replace("${PROJECT_NAME}", project_name)
+cmake_text = cmake_text.replace("${CMAKE_LANGUAGE_VERSION}", cpp_version)
+
+with open("CMakeLists.txt", "w") as f:
+    f.write(cmake_text)
+        
+with open("src/main.cpp", "w") as f:
+    f.write(default_main_file)
+
+print("Created " + project_name + "!")
 

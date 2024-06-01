@@ -6,7 +6,7 @@ import subprocess
 #		CONFIG
 #---------------------------------------
 
-VERSION_BEGIN_STR = "set(BLT_VERSION "
+VERSION_BEGIN_STR = " VERSION "
 VERSION_END_STR = ")"
 PATCH_LIMIT = 100000
 

@@ -11,6 +11,9 @@ import create_git_repo as repo
 import util.color_io as io
 
 scripts_dir = "/home/brett/Documents/code/scripts"
+dir_path = os.path.dirname(os.path.realpath(__file__))
+if not dir_path.endswith("/"):
+	dir_path += "/"
 github_url = "https://github.com/Tri11Paragon/"
 
 git_ignore = """cmake-build*/
@@ -208,10 +211,11 @@ if args.create_git:
     desc = ""
     if isinstance(args.create_git, str):
         desc = args.create_git
-    open_process(["create_git_repo", "-d", desc, project_name])
+    open_process(["python3", dir_path + "create_git_repo.py", "-d", desc, project_name])
     if not github_url.endswith("/"):
         github_url += "/"
     open_process(["git", "remote", "add", "origin", github_url + project_name])
+    open_process(["git", "branch", "--set-upstream-to=origin/main", "main"])
     
 cmake_text = cmake_text.replace("${SUB_DIRS}", sub_dirs)
 cmake_text = cmake_text.replace("${LINKS}", links)

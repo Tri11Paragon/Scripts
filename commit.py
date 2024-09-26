@@ -196,7 +196,7 @@ def main():
 		prog="Commit Helper", 
 		description="Help you make pretty commits :3")
 	
-	parser.add_argument("action", required=False)
+	parser.add_argument("action", nargs='?', default=None)
 	parser.add_argument("-p", "--patch", action='store_true', default=False, required=False)
 	parser.add_argument("-m", "--minor", action='store_true', default=False, required=False)
 	parser.add_argument("-M", "--major", action='store_true', default=False, required=False)
@@ -225,7 +225,10 @@ def main():
 	
 	if not (args.patch or args.minor or args.major):
 		try:
-			type = input("What kind of commit is this ((M)ajor, (m)inor, (p)atch)? ")
+			if args.action is not None:
+				type = args.action
+			else:
+				type = input("What kind of commit is this ((M)ajor, (m)inor, (p)atch)? ")
 			
 			if type.startswith('M'):
 				args.major = True

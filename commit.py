@@ -1,6 +1,13 @@
 #!/usr/bin/python3
 
 import subprocess
+import argparse
+import sys
+import os
+import itertools
+import requests
+import json
+from pathlib import Path
 
 #---------------------------------------
 #		CONFIG
@@ -8,11 +15,94 @@ import subprocess
 
 VERSION_BEGIN_STR = " VERSION "
 VERSION_END_STR = ")"
-PATCH_LIMIT = 100000
 
 #---------------------------------------
 #	      DO NOT TOUCH
 #---------------------------------------
+
+USER_HOME = Path.home()
+ENVIRONMENT_DATA_LOCATION = USER_HOME / ".brett_scripts.env"
+
+if sys.platform.startswith("win"):
+	CONFIG_FILE_LOCATION = os.getenv('APPDATA') + "\BLT\commit_config.env"
+else:
+	XDG_CONFIG_HOME = Path(os.environ.get('XDG_CONFIG_HOME'))
+	if len(XDG_CONFIG_HOME) == 0:
+		XDG_CONFIG_HOME = USER_HOME
+	CONFIG_FILE_LOCATION = XDG_CONFIG_HOME / "blt" / "commit_config.env"
+
+class Config:
+	def __init__(self):
+		# Inline with semantic versioning it doesn't make sense to branch / release on minor
+		self.branch_on_major = True
+		self.branch_on_minor = False
+		self.release_on_major = True
+		self.release_on_minor = False
+		self.main_branch = "main"
+		self.patch_limit = -1
+	
+	def from_file(file):
+		values = {}
+		with open(file, "rt") as f:
+			for line in f:
+				if line.startswith("export"):
+					content = line.split("=")
+					for idx, c in enumerate(content):
+						content[idx] = c.replace("export", "").strip()
+					values[content[0]] = content[1].replace("\"", "").replace("'", "")
+		config = Config()
+		config.branch_on_major = values["branch_on_major"].lower() == "true"
+		config.release_on_major = values["release_on_major"].lower() == "true"
+		config.main_branch = values["main_branch"]
+		config.patch_limit = int(values["patch_limit"])
+  
+		return config;
+
+	def save_to_file(self, file):
+		with open(file, 'w') as f:
+			f.write("export branch_on_major=" + str(self.branch_on_major))
+			f.write("export release_on_major=" + str(self.release_on_major))
+			f.write('export main_branch="' + self.main_branch + '"')
+			f.write("export patch_limit=" + str(self.patch_limit))
+			
+
+class EnvData:
+	def __init__(self, github_username = '', github_token = ''):
+		self.github_token = github_token
+		self.github_username = github_username
+  
+	def get_env_from_file(file):
+		f = open(file, "rt")
+		values = {}
+		for line in f:
+			if line.startswith("export"):
+				content = line.split("=")
+				for idx, c in enumerate(content):
+					content[idx] = c.replace("export", "").strip()
+				values[content[0]] = content[1].replace("\"", "").replace("'", "")
+		try:
+			github_token = values["github_token"]
+		except Exception:
+			print("Failed to parse github token!")
+		try:
+			github_username = values["github_username"]
+		except:
+			print("Failed to parse github username! Assuming you are me!")
+			github_username = "Tri11Paragon"
+		return EnvData(github_username=github_username, github_token=github_token)
+
+def open_process(command, print_out = True):
+	process = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+	stdout, stderr = process.communicate()
+	exit_code = process.wait()
+	str_out = stdout.decode('utf8')
+	str_err = stderr.decode('utf8')
+	if print_out and len(str_out) > 0:
+		print(str_out, end='')
+	if print_out and len(str_err) > 0:
+		print(str_err, end='')
+	#print(stdout, stderr, exit_code)
+	return (stdout, stderr, exit_code)
 
 def load_cmake():
 	cmake_file = open("CMakeLists.txt", 'r')
@@ -38,8 +128,8 @@ def split_version(cmake_text):
 def recombine(cmake_text, version_parts, begin, end):
 	constructed_version = version_parts[0] + '.' + version_parts[1] + '.' + version_parts[2]
 	constructed_text_begin = cmake_text[0:begin]
-	constrcuted_text_end = cmake_text[end::]
-	return constructed_text_begin + constructed_version + constrcuted_text_end
+	constructed_text_end = cmake_text[end::]
+	return constructed_text_begin + constructed_version + constructed_text_end
 
 
 def inc_major(cmake_text):
@@ -55,32 +145,124 @@ def inc_minor(cmake_text):
 	version_parts[2] = '0'
 	return recombine(cmake_text, version_parts, begin, end)
 
-def inc_patch(cmake_text):
+def inc_patch(config: Config, cmake_text):
 	version_parts, begin, end = split_version(cmake_text)
-	if int(version_parts[2]) + 1 >= PATCH_LIMIT:
+	if config.patch_limit > 0 and int(version_parts[2]) + 1 >= config.patch_limit:
 		return inc_minor(cmake_text)
 	version_parts[2] = str(int(version_parts[2]) + 1)
 	return recombine(cmake_text, version_parts, begin, end)
 
-cmake_text = load_cmake()
-cmake_version = get_version(cmake_text)[0]
-print(f"Current Version: {cmake_version}")
+def make_branch(config: Config, name):
+	print(f"Making new branch {name}")
+	subprocess.call(["git", "branch", "-b", name])
+	subprocess.call(["git", "checkout", name])
+	subprocess.call(["git", "merge", config.main_branch])
+	subprocess.call(["git", "checkout", config.main_branch])
 
-try:
-	type = input("What kind of commit is this ((M)ajor, (m)inor, (p)atch)? ")
+def make_release(config: Config, env: EnvData, name):
+	print(f"Making new release {name}")
+	repos_v = open_process(["git", "remote", "-v"])[0].splitlines()
+	urls = []
+	for line in repos_v:
+		origin = itertools.takewhile(lambda c: not c.isspace(), line)
+		print(f"Origin: {origin}")
+		urls.append(open_process(["git", "remote", "get-url", origin])[0])
+	urls = set(urls)
+	print(urls)
+	data = {
+		'tag_name': name,
+		'name': name,
+		'body': "Automated Release",
+		'draft': False,
+		'prerelease': False
+	}
+	headers = {
+    	'Authorization': f'token {env.github_token}',
+    	'Accept': 'application/vnd.github.v3+json'
+	}
+	for url in urls:
+		response = requests.post(url, headers=headers, data=json.dumps(data))
+		if response.status_code == 201:
+			print('Release created successfully!')
+			release_data = response.json()
+			print(f"Release URL: {release_data['html_url']}")
+		else:
+			print(f"Failed to create release: {response.status_code}")
+			print(response.json())
 
-	if type.startswith('M'):
+
+def main():
+	parser = argparse.ArgumentParser(
+		prog="Commit Helper", 
+		description="Help you make pretty commits :3")
+	
+	parser.add_argument("action", required=False)
+	parser.add_argument("-p", "--patch", action='store_true', default=False, required=False)
+	parser.add_argument("-m", "--minor", action='store_true', default=False, required=False)
+	parser.add_argument("-M", "--major", action='store_true', default=False, required=False)
+	parser.add_argument('-e', "--env", help="environment file", required=False)
+	parser.add_argument('-c', "--config", help="config file", required=False)
+	parser.add_argument("--default_create_config", action="store_true", default=False, required=False)
+	
+	args = parser.parse_args()
+ 
+	if args.env is not None:
+		env = EnvData.get_env_from_file(args.e)
+	else:
+		env = EnvData.get_env_from_file(ENVIRONMENT_DATA_LOCATION)
+  
+	if args.config is not None:
+		config = Config.from_file(args.config)
+	else:
+		config = Config.from_file(CONFIG_FILE_LOCATION)
+  
+	if args.default_create_config:
+		Config.save_to_file(args.config if args.config is not None else CONFIG_FILE_LOCATION)
+	
+	cmake_text = load_cmake()
+	cmake_version = get_version(cmake_text)[0]
+	print(f"Current Version: {cmake_version}")
+	
+	if not (args.patch or args.minor or args.major):
+		try:
+			type = input("What kind of commit is this ((M)ajor, (m)inor, (p)atch)? ")
+			
+			if type.startswith('M'):
+				args.major = True
+			elif type.startswith('m'):
+				args.minor = True
+			elif type.startswith('p') or type.startswith('P') or len(type) == 0:
+				args.patch = True
+		except KeyboardInterrupt:
+			print("\nCancelling!")
+	
+	if args.major:
 		print("Selected major")
 		write_cmake(inc_major(cmake_text))
-	elif type.startswith('m'):
+	elif args.minor:
 		print("Selected minor")
 		write_cmake(inc_minor(cmake_text))
-	elif type.startswith('p') or type.startswith('P') or len(type) == 0:
+	elif args.patch:
 		print("Selected patch")
-		write_cmake(inc_patch(cmake_text))
+		write_cmake(inc_patch(config, cmake_text))
 
+	
 	subprocess.call(["git", "add", "*"])
 	subprocess.call(["git", "commit"])
+ 
+	if args.major:
+		version_parts = split_version(cmake_text)[0]
+		if config.branch_on_major:
+			make_branch(config, "v" + str(version_parts[0]))
+		if config.branch_on_minor:
+			make_branch(config, "v" + str(version_parts[0]) + "." + str(version_parts[1]))
+		if config.release_on_major:
+			make_release(config, "v" + str(version_parts[0]))
+		if config.release_on_minor:
+			make_release(config, "v" + str(version_parts[0]) + "." + str(version_parts[1]))
+			
+ 
 	subprocess.call(["sh", "-c", "git remote | xargs -L1 git push --all"])
-except KeyboardInterrupt:
-	print("\nCancelling!")
+  
+if __name__ == "__main__":
+	main()

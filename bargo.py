@@ -40,8 +40,8 @@ file(GLOB_RECURSE PROJECT_BUILD_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
 add_executable(${PROJECT_NAME} ${PROJECT_BUILD_FILES})
 
-target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Werror -Wpedantic -Wno-comment)
-target_link_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Werror -Wpedantic -Wno-comment)
+target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Weverything -Wpedantic -Wno-comment)
+target_link_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Weverything -Wpedantic -Wno-comment)
 
 ${LINKS}
 
@@ -77,8 +77,8 @@ file(GLOB_RECURSE PROJECT_BUILD_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
 add_library(${PROJECT_NAME}${CMAKE_LIBRARY_TYPE} ${PROJECT_BUILD_FILES})
 
-target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Werror -Wpedantic -Wno-comment)
-target_link_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Werror -Wpedantic -Wno-comment)
+target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Weverything -Wpedantic -Wno-comment)
+target_link_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Weverything -Wpedantic -Wno-comment)
 
 ${LINKS}
 

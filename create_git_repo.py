@@ -7,42 +7,50 @@ import os
 from pathlib import Path
 
 class EnvData:
-	def __init__(self, github_token = '', gitea_token = ''):
+	def __init__(self, github_username = '', gitea_username = '', github_token = '', gitea_token = ''):
 		self.github_token = github_token
 		self.gitea_token = gitea_token
+		self.github_username = github_username
+		self.gitea_username = gitea_username
+  
+	def get_env_from_file(file):
+		f = open(file, "rt")
+		values = {}
+		for line in f:
+			if line.startswith("export"):
+				content = line.split("=")
+				for idx, c in enumerate(content):
+					content[idx] = c.replace("export", "").strip()
+				values[content[0]] = content[1].replace("\"", "").replace("'", "")
+		try:
+			github_token = values["github_token"]
+		except Exception:
+			print("Failed to parse github token!")
+		try:
+			gitea_token = values["gitea_token"]
+		except:
+			print("Failed to parse gitea token!")
+		try:
+			github_username = values["github_username"]
+		except:
+			print("Failed to parse github username! Assuming you are me!")
+			github_username = "Tri11Paragon"
+		try:
+			gitea_username = values["gitea_username"]
+		except:
+			print("Failed to parse gitea username! Assuming github username")
+			gitea_username = github_username
+		return EnvData(github_username=github_username, gitea_username=gitea_username, github_token=github_token, gitea_token=gitea_token)
 
 class RepoData:
-    def __init__(self, repo_name, description, env: EnvData, github_username = "tri11paragon", gitea_username = "tri11paragon", gitea_url = "https://git.tpgc.me"):
+    def __init__(self, repo_name, description, env: EnvData, gitea_url = "https://git.tpgc.me"):
         self.repo_name = repo_name
         self.description = description
         self.env = env
-        self.github_username = github_username
-        self.gitea_username = gitea_username
         self.gitea_url = gitea_url
 
-def get_env_from_file(file):
-    github_token = ''
-    gitea_token = ''
-    f = open(file, "rt")
-    values = {}
-    for line in f:
-        if line.startswith("export"):
-            content = line.split("=")
-            for idx, c in enumerate(content):
-                content[idx] = c.replace("export", "").strip()
-            values[content[0]] = content[1].replace("\"", "").replace("'", "")
-    try:
-        github_token = values["github_token"]
-    except Exception:
-        print("Failed to parse github token")
-    try:
-        gitea_token = values["gitea_token"]
-    except:
-        print("Failed to parse gitea token!")
-    return EnvData(github_token=github_token, gitea_token=gitea_token)
-
 def get_env_from_os():
-    return EnvData(github_token=os.environ["github_token"], gitea_token=os.environ["gitea_token"])
+    return EnvData(github_username=os.environ["github_username"], gitea_username=os.environ["gitea_username"], github_token=os.environ["github_token"], gitea_token=os.environ["gitea_token"])
 
 def create_repo(data: RepoData):
 	# GitHub API endpoint for creating a repository
@@ -70,8 +78,8 @@ def create_repo(data: RepoData):
 	gitea_url = f'{data.gitea_url}/api/v1/repos/migrate'
 	gitea_payload = {
 		'auth_token': data.env.github_token,
-		'auth_username': data.github_username,
-		'clone_addr': f'https://github.com/{data.github_username}/{data.repo_name}.git',
+		'auth_username': data.env.github_username,
+		'clone_addr': f'https://github.com/{data.env.github_username}/{data.repo_name}.git',
 		'description': data.description,
 		"issues": True,
 		"labels": True,
@@ -83,7 +91,7 @@ def create_repo(data: RepoData):
 		"service": "github",
 		"wiki": True,
 		'repo_name': data.repo_name,
-		'repo_owner': data.gitea_username,
+		'repo_owner': data.env.gitea_username,
 		'private': False  # Set to True if you want a private repository
 	}
 	gitea_headers = {
@@ -113,9 +121,8 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    env = EnvData('', '')
     if (args.e is not None) and not (args.e == 'env'):
-        env = get_env_from_file(args.e)
+        env = EnvData.get_env_from_file(args.e)
     else:
         env = get_env_from_os()
     

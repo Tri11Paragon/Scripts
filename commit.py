@@ -27,7 +27,7 @@ if sys.platform.startswith("win"):
 	CONFIG_FILE_LOCATION = os.getenv('APPDATA') + "\BLT\commit_config.env"
 else:
 	XDG_CONFIG_HOME = Path(os.environ.get('XDG_CONFIG_HOME'))
-	if len(XDG_CONFIG_HOME) == 0:
+	if len(str(XDG_CONFIG_HOME)) == 0:
 		XDG_CONFIG_HOME = USER_HOME
 	CONFIG_FILE_LOCATION = XDG_CONFIG_HOME / "blt" / "commit_config.env"
 

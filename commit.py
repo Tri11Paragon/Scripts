@@ -159,7 +159,7 @@ def make_branch(config: Config, name):
 	subprocess.call(["git", "merge", config.main_branch])
 	subprocess.call(["git", "checkout", config.main_branch])
 
-def make_release(config: Config, env: EnvData, name):
+def make_release(env: EnvData, name):
 	print(f"Making new release {name}")
 	repos_v = open_process(["git", "remote", "-v"])[0].splitlines()
 	urls = []
@@ -202,7 +202,7 @@ def main():
 	parser.add_argument("-M", "--major", action='store_true', default=False, required=False)
 	parser.add_argument('-e', "--env", help="environment file", required=False)
 	parser.add_argument('-c', "--config", help="config file", required=False)
-	parser.add_argument("--default_create_config", action="store_true", default=False, required=False)
+	parser.add_argument("--create_default_config", action="store_true", default=False, required=False)
 	
 	args = parser.parse_args()
  
@@ -260,9 +260,9 @@ def main():
 		if config.branch_on_minor:
 			make_branch(config, "v" + str(version_parts[0]) + "." + str(version_parts[1]))
 		if config.release_on_major:
-			make_release(config, "v" + str(version_parts[0]))
+			make_release(env, "v" + str(version_parts[0]))
 		if config.release_on_minor:
-			make_release(config, "v" + str(version_parts[0]) + "." + str(version_parts[1]))
+			make_release(env, "v" + str(version_parts[0]) + "." + str(version_parts[1]))
 			
  
 	subprocess.call(["sh", "-c", "git remote | xargs -L1 git push --all"])

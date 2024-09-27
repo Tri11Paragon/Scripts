@@ -39,7 +39,7 @@ class Config:
 		self.branch_on_major = True
 		self.branch_on_minor = False
 		self.release_on_major = True
-		self.release_on_minor = False
+		self.release_on_minor = True
 		self.main_branch = "main"
 		self.patch_limit = -1
 	
@@ -213,7 +213,9 @@ def main():
 	parser.add_argument("-M", "--major", action='store_true', default=False, required=False)
 	parser.add_argument('-e', "--env", help="environment file", required=False, default=None)
 	parser.add_argument('-c', "--config", help="config file", required=False, default=None)
-	parser.add_argument("--create_default_config", action="store_true", default=False, required=False)
+	parser.add_argument("--create-default-config", action="store_true", default=False, required=False)
+	parser.add_argument("--no-release", action="store_true", default=False, required=False)
+	parser.add_argument("--no-branch", action="store_true", default=False, required=False)
 	
 	args = parser.parse_args()
  
@@ -266,19 +268,19 @@ def main():
  
 	cmake_text = load_cmake()
 	version_parts = split_version(cmake_text)[0]
-	if args.major:
+	if not args.no_branch and args.major:
 		if config.branch_on_major:
 			make_branch(config, "v" + str(version_parts[0]))
-	if args.minor:
+	if not args.no_branch and args.minor:
 		if config.branch_on_minor:
 			make_branch(config, "v" + str(version_parts[0]) + "." + str(version_parts[1]))
 		
 	subprocess.call(["sh", "-c", "git remote | xargs -L1 git push --all"])
  
-	if args.major:
+	if not args.no_release and args.major:
 		if config.release_on_major:
 			make_release(env, "v" + str(version_parts[0]))
-	if args.minor:
+	if not args.no_release and args.minor:
 		if config.release_on_minor:
 			make_release(env, "v" + str(version_parts[0]) + "." + str(version_parts[1]))
   

@@ -27,7 +27,12 @@ if sys.platform.startswith("win"):
 	CONFIG_FILE_DIRECTORY = Path(os.getenv('APPDATA') + "\BLT")
 	CONFIG_FILE_LOCATION = Path(CONFIG_FILE_DIRECTORY + "\commit_config.env")
 else:
-	XDG_CONFIG_HOME = Path(os.environ.get('XDG_CONFIG_HOME'))
+	XDG_CONFIG_HOME = os.environ.get('XDG_CONFIG_HOME')
+	if XDG_CONFIG_HOME is None:
+		XDG_CONFIG_HOME = USER_HOME / ".config"
+	else:
+		XDG_CONFIG_HOME = Path(XDG_CONFIG_HOME)
+	
 	if len(str(XDG_CONFIG_HOME)) == 0:
 		XDG_CONFIG_HOME = USER_HOME
 	CONFIG_FILE_DIRECTORY = XDG_CONFIG_HOME / "blt"
@@ -43,27 +48,26 @@ class Config:
 		self.main_branch = "main"
 		self.patch_limit = -1
 	
+	def toJSON(self):
+		return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+	
+	def fromJSON(file):
+		with open(file, "r") as f:
+			j = json.load(f)
+			obj = Config()
+			[setattr(obj, key, val) for key, val in j.items() if hasattr(obj, key)]
+			return obj
+
 	def from_file(file):
 		values = {}
 		if (not os.path.exists(file)):
 			return Config()
 
-		with open(file, "rt") as f:
-			for line in f:
-				if line.startswith("export"):
-					content = line.split("=")
-					for idx, c in enumerate(content):
-						content[idx] = c.replace("export", "").strip()
-					values[content[0]] = content[1].replace("\"", "").replace("'", "")
-		config = Config()
-		config.branch_on_major = (values["branch_on_major"].lower() == "true" or values["branch_on_major"].lower() == "1")
-		config.branch_on_minor = (values["branch_on_minor"].lower() == "true" or values["branch_on_minor"].lower() == "1")
-		config.release_on_major = (values["release_on_major"].lower() == "true" or values["release_on_major"].lower() == "1")
-		config.release_on_minor = (values["release_on_minor"].lower() == "true" or values["release_on_minor"].lower() == "1")
-		config.main_branch = values["main_branch"]
-		config.patch_limit = int(values["patch_limit"])
-  
-		return config;
+		with open(file, "r") as f:
+			j = json.load(f)
+			obj = Config()
+			[setattr(obj, key, val) for key, val in j.items() if hasattr(obj, key)]
+			return obj
 
 	def save_to_file(self, file):
 		dir_index = str(file).rfind("/")
@@ -71,13 +75,8 @@ class Config:
 		if not os.path.exists(dir):
 			print(f"Creating config directory {dir}")
 			os.makedirs(dir)
-		with open(file, 'w') as f:
-			f.write("export branch_on_major=" + str(self.branch_on_major) + "\n")
-			f.write("export branch_on_minor=" + str(self.branch_on_minor) + "\n")
-			f.write("export release_on_major=" + str(self.release_on_major) + "\n")
-			f.write("export release_on_minor=" + str(self.release_on_minor) + "\n")
-			f.write('export main_branch="' + self.main_branch + '"' + "\n")
-			f.write("export patch_limit=" + str(self.patch_limit) + "\n")
+		with open(file, "w") as f:
+			json.dump(self, f, default=lambda o: o.__dict__, sort_keys=True, indent=4)
 			
 
 class EnvData:

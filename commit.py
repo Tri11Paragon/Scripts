@@ -24,12 +24,14 @@ USER_HOME = Path.home()
 ENVIRONMENT_DATA_LOCATION = USER_HOME / ".brett_scripts.env"
 
 if sys.platform.startswith("win"):
-	CONFIG_FILE_LOCATION = os.getenv('APPDATA') + "\BLT\commit_config.env"
+	CONFIG_FILE_DIRECTORY = Path(os.getenv('APPDATA') + "\BLT")
+	CONFIG_FILE_LOCATION = Path(CONFIG_FILE_DIRECTORY + "\commit_config.env")
 else:
 	XDG_CONFIG_HOME = Path(os.environ.get('XDG_CONFIG_HOME'))
 	if len(str(XDG_CONFIG_HOME)) == 0:
 		XDG_CONFIG_HOME = USER_HOME
-	CONFIG_FILE_LOCATION = XDG_CONFIG_HOME / "blt" / "commit_config.env"
+	CONFIG_FILE_DIRECTORY = XDG_CONFIG_HOME / "blt"
+	CONFIG_FILE_LOCATION = CONFIG_FILE_DIRECTORY / "commit_config.env"
 
 class Config:
 	def __init__(self):
@@ -43,6 +45,9 @@ class Config:
 	
 	def from_file(file):
 		values = {}
+		if (not os.path.exists(file)):
+			return Config()
+
 		with open(file, "rt") as f:
 			for line in f:
 				if line.startswith("export"):
@@ -51,19 +56,28 @@ class Config:
 						content[idx] = c.replace("export", "").strip()
 					values[content[0]] = content[1].replace("\"", "").replace("'", "")
 		config = Config()
-		config.branch_on_major = values["branch_on_major"].lower() == "true"
-		config.release_on_major = values["release_on_major"].lower() == "true"
+		config.branch_on_major = (values["branch_on_major"].lower() == "true" or values["branch_on_major"].lower() == "1")
+		config.branch_on_minor = (values["branch_on_minor"].lower() == "true" or values["branch_on_minor"].lower() == "1")
+		config.release_on_major = (values["release_on_major"].lower() == "true" or values["release_on_major"].lower() == "1")
+		config.release_on_minor = (values["release_on_minor"].lower() == "true" or values["release_on_minor"].lower() == "1")
 		config.main_branch = values["main_branch"]
 		config.patch_limit = int(values["patch_limit"])
   
 		return config;
 
 	def save_to_file(self, file):
+		dir_index = str(file).rfind("/")
+		dir = str(file)[:dir_index]
+		if not os.path.exists(dir):
+			print(f"Creating config directory {dir}")
+			os.makedirs(dir)
 		with open(file, 'w') as f:
-			f.write("export branch_on_major=" + str(self.branch_on_major))
-			f.write("export release_on_major=" + str(self.release_on_major))
-			f.write('export main_branch="' + self.main_branch + '"')
-			f.write("export patch_limit=" + str(self.patch_limit))
+			f.write("export branch_on_major=" + str(self.branch_on_major) + "\n")
+			f.write("export branch_on_minor=" + str(self.branch_on_minor) + "\n")
+			f.write("export release_on_major=" + str(self.release_on_major) + "\n")
+			f.write("export release_on_minor=" + str(self.release_on_minor) + "\n")
+			f.write('export main_branch="' + self.main_branch + '"' + "\n")
+			f.write("export patch_limit=" + str(self.patch_limit) + "\n")
 			
 
 class EnvData:
@@ -131,7 +145,6 @@ def recombine(cmake_text, version_parts, begin, end):
 	constructed_text_end = cmake_text[end::]
 	return constructed_text_begin + constructed_version + constructed_text_end
 
-
 def inc_major(cmake_text):
 	version_parts, begin, end = split_version(cmake_text)
 	version_parts[0] = str(int(version_parts[0]) + 1)
@@ -154,8 +167,7 @@ def inc_patch(config: Config, cmake_text):
 
 def make_branch(config: Config, name):
 	print(f"Making new branch {name}")
-	subprocess.call(["git", "branch", "-b", name])
-	subprocess.call(["git", "checkout", name])
+	subprocess.call(["git", "checkout", "-b", name])
 	subprocess.call(["git", "merge", config.main_branch])
 	subprocess.call(["git", "checkout", config.main_branch])
 
@@ -164,21 +176,20 @@ def make_release(env: EnvData, name):
 	repos_v = open_process(["git", "remote", "-v"])[0].splitlines()
 	urls = []
 	for line in repos_v:
-		origin = itertools.takewhile(lambda c: not c.isspace(), line)
-		print(f"Origin: {origin}")
-		urls.append(open_process(["git", "remote", "get-url", origin])[0])
+		origin = ''.join(itertools.takewhile(str.isalpha, line.decode('utf8')))
+		urls.append("https://api.github.com/repos/" + open_process(["git", "remote", "get-url", origin], False)[0].decode('utf8').replace("\n", "").replace("https://github.com/", "") + "/releases")
 	urls = set(urls)
-	print(urls)
 	data = {
 		'tag_name': name,
 		'name': name,
-		'body': "Automated Release",
+		'body': "Automated Release '" + name + "'",
 		'draft': False,
 		'prerelease': False
 	}
 	headers = {
-    	'Authorization': f'token {env.github_token}',
-    	'Accept': 'application/vnd.github.v3+json'
+		'Authorization': f'Bearer {env.github_token}',
+		'Accept': 'application/vnd.github+json',
+		'X-GitHub-Api-Version': '2022-11-28'
 	}
 	for url in urls:
 		response = requests.post(url, headers=headers, data=json.dumps(data))
@@ -200,8 +211,8 @@ def main():
 	parser.add_argument("-p", "--patch", action='store_true', default=False, required=False)
 	parser.add_argument("-m", "--minor", action='store_true', default=False, required=False)
 	parser.add_argument("-M", "--major", action='store_true', default=False, required=False)
-	parser.add_argument('-e', "--env", help="environment file", required=False)
-	parser.add_argument('-c', "--config", help="config file", required=False)
+	parser.add_argument('-e', "--env", help="environment file", required=False, default=None)
+	parser.add_argument('-c', "--config", help="config file", required=False, default=None)
 	parser.add_argument("--create_default_config", action="store_true", default=False, required=False)
 	
 	args = parser.parse_args()
@@ -216,8 +227,8 @@ def main():
 	else:
 		config = Config.from_file(CONFIG_FILE_LOCATION)
   
-	if args.default_create_config:
-		Config.save_to_file(args.config if args.config is not None else CONFIG_FILE_LOCATION)
+	if args.create_default_config:
+		config.save_to_file(args.config if args.config is not None else CONFIG_FILE_LOCATION)
 	
 	cmake_text = load_cmake()
 	cmake_version = get_version(cmake_text)[0]
@@ -238,6 +249,7 @@ def main():
 				args.patch = True
 		except KeyboardInterrupt:
 			print("\nCancelling!")
+			return
 	
 	if args.major:
 		print("Selected major")
@@ -249,23 +261,26 @@ def main():
 		print("Selected patch")
 		write_cmake(inc_patch(config, cmake_text))
 
-	
 	subprocess.call(["git", "add", "*"])
 	subprocess.call(["git", "commit"])
  
+	cmake_text = load_cmake()
+	version_parts = split_version(cmake_text)[0]
 	if args.major:
-		version_parts = split_version(cmake_text)[0]
 		if config.branch_on_major:
 			make_branch(config, "v" + str(version_parts[0]))
+	if args.minor:
 		if config.branch_on_minor:
 			make_branch(config, "v" + str(version_parts[0]) + "." + str(version_parts[1]))
+		
+	subprocess.call(["sh", "-c", "git remote | xargs -L1 git push --all"])
+ 
+	if args.major:
 		if config.release_on_major:
 			make_release(env, "v" + str(version_parts[0]))
+	if args.minor:
 		if config.release_on_minor:
 			make_release(env, "v" + str(version_parts[0]) + "." + str(version_parts[1]))
-			
- 
-	subprocess.call(["sh", "-c", "git remote | xargs -L1 git push --all"])
   
 if __name__ == "__main__":
 	main()

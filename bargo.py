@@ -82,6 +82,8 @@ project(${PROJECT_NAME} VERSION 0.0.1)
 option(ENABLE_ADDRSAN "Enable the address sanitizer" OFF)
 option(ENABLE_UBSAN "Enable the ub sanitizer" OFF)
 option(ENABLE_TSAN "Enable the thread data race sanitizer" OFF)
+option(BUILD_${PROJECT_NAME_UPPER}_EXAMPLES "Build example programs. This will build with CTest" OFF)
+option(BUILD_${PROJECT_NAME_UPPER}_TESTS "Build test programs. This will build with CTest" OFF)
 
 set(CMAKE_CXX_STANDARD ${CMAKE_LANGUAGE_VERSION})
 
@@ -92,25 +94,17 @@ file(GLOB_RECURSE PROJECT_BUILD_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
 add_executable(${PROJECT_NAME} ${PROJECT_BUILD_FILES})
 
-target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Weverything -Wpedantic -Wno-comment)
-target_link_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Weverything -Wpedantic -Wno-comment)
+compile_options(${PROJECT_NAME})
 
 ${LINKS}
 
-if (${ENABLE_ADDRSAN} MATCHES ON)
-    target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=address)
-    target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=address)
-endif ()
+if (${BUILD_${PROJECT_NAME_UPPER}_EXAMPLES})
 
-if (${ENABLE_UBSAN} MATCHES ON)
-    target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined)
-    target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined)
-endif ()
+endif()
 
-if (${ENABLE_TSAN} MATCHES ON)
-    target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=thread)
-    target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=thread)
-endif ()
+if (BUILD_${PROJECT_NAME_UPPER}_TESTS)
+
+endif()
 """
 
 cmake_lib_default_text = """cmake_minimum_required(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})
@@ -122,6 +116,8 @@ project(${PROJECT_NAME})
 option(ENABLE_ADDRSAN "Enable the address sanitizer" OFF)
 option(ENABLE_UBSAN "Enable the ub sanitizer" OFF)
 option(ENABLE_TSAN "Enable the thread data race sanitizer" OFF)
+option(BUILD_${PROJECT_NAME_UPPER}_EXAMPLES "Build example programs. This will build with CTest" OFF)
+option(BUILD_${PROJECT_NAME_UPPER}_TESTS "Build test programs. This will build with CTest" OFF)
 
 set(CMAKE_CXX_STANDARD ${CMAKE_LANGUAGE_VERSION})
 
@@ -132,25 +128,17 @@ file(GLOB_RECURSE PROJECT_BUILD_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
 add_library(${PROJECT_NAME}${CMAKE_LIBRARY_TYPE} ${PROJECT_BUILD_FILES})
 
-target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Weverything -Wpedantic -Wno-comment)
-target_link_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Weverything -Wpedantic -Wno-comment)
+compile_options(${PROJECT_NAME})
 
 ${LINKS}
 
-if (${ENABLE_ADDRSAN} MATCHES ON)
-    target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=address)
-    target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=address)
-endif ()
+if (${BUILD_${PROJECT_NAME_UPPER}_EXAMPLES})
 
-if (${ENABLE_UBSAN} MATCHES ON)
-    target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined)
-    target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=undefined)
-endif ()
+endif()
 
-if (${ENABLE_TSAN} MATCHES ON)
-    target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=thread)
-    target_link_options(${PROJECT_NAME} PRIVATE -fsanitize=thread)
-endif ()
+if (BUILD_${PROJECT_NAME_UPPER}_TESTS)
+
+endif()
 """
 
 default_main_file = """#include <iostream>
@@ -278,6 +266,7 @@ cmake_text = cmake_text.replace("${LINKS}", links)
 cmake_text = cmake_text.replace("${CMAKE_MAJOR_VERSION}", cmake_major)
 cmake_text = cmake_text.replace("${CMAKE_MINOR_VERSION}", cmake_minor)
 cmake_text = cmake_text.replace("${PROJECT_NAME}", project_name)
+cmake_text = cmake_text.replace("${PROJECT_NAME_UPPER}", project_name.upper().replace("-", "_"))
 cmake_text = cmake_text.replace("${CMAKE_LANGUAGE_VERSION}", cpp_version)
 
 with open("CMakeLists.txt", "w") as f:

@@ -70,7 +70,7 @@ macro(blt_add_project name source type)
 
     set_property(TEST ${name} PROPERTY FAIL_REGULAR_EXPRESSION "FAIL;ERROR;FATAL;exception")
 
-    project(blt-gp)
+    project(${PROJECT_NAME})
 endmacro()"""
 
 cmake_exec_default_text = """cmake_minimum_required(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})

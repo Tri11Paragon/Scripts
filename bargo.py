@@ -24,7 +24,59 @@ out/
 ./out/
 """
 
+cmake_macros = """macro(sanitizers target_name)
+    if (${ENABLE_ADDRSAN} MATCHES ON)
+        target_compile_options(${target_name} PRIVATE -fsanitize=address)
+        target_link_options(${target_name} PRIVATE -fsanitize=address)
+    endif ()
+
+    if (${ENABLE_UBSAN} MATCHES ON)
+        target_compile_options(${target_name} PRIVATE -fsanitize=undefined)
+        target_link_options(${target_name} PRIVATE -fsanitize=undefined)
+    endif ()
+
+    if (${ENABLE_TSAN} MATCHES ON)
+        target_compile_options(${target_name} PRIVATE -fsanitize=thread)
+        target_link_options(${target_name} PRIVATE -fsanitize=thread)
+    endif ()
+endmacro()
+
+macro(compile_options target_name)
+    if (NOT ${MOLD} STREQUAL MOLD-NOTFOUND)
+        target_compile_options(${target_name} PUBLIC -fuse-ld=mold)
+    endif ()
+
+    target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic -Wno-comment)
+    target_link_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic -Wno-comment)
+    sanitizers(${target_name})
+endmacro()
+
+macro(blt_add_project name source type)
+
+    project(${name}-${type})
+
+    add_executable(${name}-${type} ${source})
+
+    target_link_libraries(${name}-${type} PRIVATE BLT blt-gp Threads::Threads)
+
+    compile_options(${name}-${type})
+    target_compile_definitions(${name}-${type} PRIVATE BLT_DEBUG_LEVEL=${DEBUG_LEVEL})
+
+    if (${TRACK_ALLOCATIONS})
+        target_compile_definitions(${name}-${type} PRIVATE BLT_TRACK_ALLOCATIONS=1)
+    endif ()
+
+    add_test(NAME ${name} COMMAND ${name}-${type})
+
+    set_property(TEST ${name} PROPERTY FAIL_REGULAR_EXPRESSION "FAIL;ERROR;FATAL;exception")
+
+    project(blt-gp)
+endmacro()"""
+
 cmake_exec_default_text = """cmake_minimum_required(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})
+
+${MACROS}
+
 project(${PROJECT_NAME} VERSION 0.0.1)
 
 option(ENABLE_ADDRSAN "Enable the address sanitizer" OFF)
@@ -62,6 +114,9 @@ endif ()
 """
 
 cmake_lib_default_text = """cmake_minimum_required(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})
+
+${MACROS}
+
 project(${PROJECT_NAME})
 
 option(ENABLE_ADDRSAN "Enable the address sanitizer" OFF)
@@ -217,6 +272,7 @@ if args.create_git:
     open_process(["git", "remote", "add", "origin", github_url + project_name])
     open_process(["git", "branch", "--set-upstream-to=origin/main", "main"])
     
+cmake_text = cmake_text.replace("${MACROS}", cmake_macros)
 cmake_text = cmake_text.replace("${SUB_DIRS}", sub_dirs)
 cmake_text = cmake_text.replace("${LINKS}", links)
 cmake_text = cmake_text.replace("${CMAKE_MAJOR_VERSION}", cmake_major)

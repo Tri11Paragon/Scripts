@@ -21,7 +21,7 @@ VERSION_END_STR = ")"
 #---------------------------------------
 
 USER_HOME = Path.home()
-ENVIRONMENT_DATA_LOCATION = USER_HOME / ".brett_scripts.env"
+ENVIRONMENT_DATA_LOCATION = USER_HOME / ".brett_scripts.json"
 
 if sys.platform.startswith("win"):
 	CONFIG_FILE_DIRECTORY = Path(os.getenv('APPDATA') + "\blt")

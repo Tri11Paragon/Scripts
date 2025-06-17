@@ -5,6 +5,9 @@ in pkgs.mkShell {
 		pkgs.git
 		(pkgs.python3.withPackages (python-pkgs: [
 			python-pkgs.requests
+			python-pkgs.python-uinput
+			python-pkgs.evdev
+			python-pkgs.pyqt5
 		]))
 	];
 }

@@ -16,7 +16,7 @@ def embed(input_path, output_path, namespace, var_name):
         f"// Generated from {input_path}\n"
         f"#pragma once\n\n"
         f"namespace {safe_namespace_name(namespace)}" "\n{\n"
-        f"\tinline constexpr char {safe_var_name(var_name)}_str[] = R\"(\"{contents}\")\";\n""}"
+        f"\tinline constexpr char {safe_var_name(var_name)}_str[] = R\"({contents})\";\n""}"
     )
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path.with_suffix(output_path.suffix + ".h"), "w") as f:
@@ -27,14 +27,15 @@ def main(input_dir, output_dir):
 
     for root, _, files in os.walk(input_dir):
         for file in files:
-            print(f"Processing file: %{file}%")
             file_path = Path(root) / file
 
             parent_path = file_path.relative_to(input_dir)
 
             output_path = Path(output_dir) / parent_path
 
-            embed(file_path, output_path, parent_path, file_path.name)
+            print(f"Processing file: %{file_path}%")
+
+            embed(file_path, output_path, parent_path.parent, file_path.name)
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:

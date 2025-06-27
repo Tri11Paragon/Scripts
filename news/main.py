@@ -8,7 +8,7 @@ from typing import Final, Optional, List
 import discord
 from dotenv import load_dotenv
 import re
-from pool import PlaywrightPool
+from pool import PlaywrightPool, ArticleRepository
 import trafilatura
 import io
 
@@ -25,11 +25,13 @@ intents.message_content = True
 
 bot = discord.Client(intents=intents)
 
-LOGGER = logging.getLogger("Newsulizer")
+LOGGER = logging.getLogger("main")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+
+article_repository = ArticleRepository()
 
 async def send_text_file(channel: discord.abc.Messageable, content: str, filename: str = "article.md") -> None:
     fp = io.BytesIO(content.encode("utf-8"))
@@ -46,10 +48,10 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
     LOGGER.info("Received URL from %s: %s", message.author, url)
 
     try:
-        html = await PlaywrightPool.fetch_html(url)
+        processed_html = await article_repository.get_article(url)
         # TODO: parse `html`, summarise, etc.
-        await message.channel.send(f"✅ Article downloaded – {len(html):,} bytes.")
-        await send_text_file(message.channel, trafilatura.extract(html, output_format='markdown', include_images=True, include_formatting=True, include_comments=False, favor_recall=True))
+        await message.channel.send(f"✅ Article downloaded – {len(processed_html):,} bytes.")
+        await send_text_file(message.channel, processed_html)
     except:
         LOGGER.exception("Playwright failed")
         await message.channel.send("❌ Sorry, I couldn't fetch that page.")

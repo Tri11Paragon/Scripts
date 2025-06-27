@@ -34,14 +34,14 @@ logging.basicConfig(
 
 article_repository = ArticleRepository()
 
-async def send_chat(messages):
+async def send_chat(messages, fmt):
     return await AsyncClient(host="192.168.69.3:11434").chat(
         model="deepseek-r1:8b",
         messages=messages,
         stream=False,
         options={
             'temperature': 0.5,
-            "num_ctx": 128000
+            # "num_ctx": 128000
         },
         think=True)
 
@@ -60,13 +60,39 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
     LOGGER.info("Received URL from %s: %s", message.author, url)
 
     try:
-        processed_html = await article_repository.get_article(url)
+        title, processed_html = await article_repository.get_article(url)
+        paragraphs = processed_html.split("\n")
+        paragraphs = [f"\"Paragraph ({i + 1})\": {paragraph.strip()}" for i, paragraph in enumerate(paragraphs)]
+        processed_graphs = [{"role": "user", "content": paragraph} for paragraph in paragraphs]
+        # print(paragraphs)
+        # print(processed_graphs)
+
+        messages = [
+            {"role": "system", "content": "You are an expert article-analysis assistant."
+                                          # "You WILL respond in JSON format."
+                                          "Your job is to analyse paragraphs in the article and look for provocative, emotionally charged, and loaded language"
+                                          "You will analyse the paragraphs, determine if they are provocative, and if so, output a capital X for each problematic word."
+                                          "Questions you should ask yourself while reading the paragraph:"
+                                          "1. What is the literal meaning of the questionable word or phrase?"
+                                          "2. What is the emotional or social context of the questionable word or phrase?"
+                                          "3. Does that word or phrase have any connotations, that is, associations that are positive or negative?"
+                                          "4. What group (sometimes called a “discourse community”) favors one locution over another, and why?"
+                                          "5. Is the word or phrase “loaded”?  How far does it steer us from neutral?"
+                                          "6. Does the word or phrase help me see, or does it prevent me from seeing? (This is important)"
+                                          "You will now be provided with the headline of the article then a paragraph from the article."
+                                          "The headline (title of the page) will be provided as \"Headline\": \"EXAMPLE HEADLINE\"."
+                                          "The paragraphs will be provided as \"Paragraph (numbered index)\": \"EXAMPLE PARAGRAPH\"."},
+        ]
+        messages.extend(processed_graphs)
+        response = await send_chat(messages, "json")
+        print(response)
         # TODO: parse `html`, summarise, etc.
         await message.channel.send(f"✅ Article downloaded – {len(processed_html):,} bytes.")
         await send_text_file(message.channel, processed_html)
-    except:
-        LOGGER.exception("Playwright failed")
+        await send_text_file(message.channel, response['response'])
+    except Exception as exc:
         await message.channel.send("❌ Sorry, I couldn't fetch that page.")
+        await message.channel.send(f"```\n{exc}\n```")
 
 
 def extract_first_url(text: str) -> Optional[str]:

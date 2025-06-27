@@ -61,7 +61,7 @@ class PlaywrightPool:
             await cls._pw.stop()
 
     @classmethod
-    async def fetch_html(cls, url: str) -> str:
+    async def fetch_html(cls, url: str) -> tuple[str, str]:
         if cls._browser is None:
             await cls.start()
 
@@ -70,7 +70,8 @@ class PlaywrightPool:
             try:
                 await page.goto(url, wait_until="load", timeout=60_000)
                 html = await page.content()
-                return html
+                title = await page.title()
+                return title, html
             finally:
                 await page.close()
 
@@ -139,7 +140,7 @@ class ArticleRepository:
     # ------------------------------------------------------------------ #
     # public API
     # ------------------------------------------------------------------ #
-    async def get_article(self, url: str) -> str:
+    async def get_article(self, url: str) -> tuple[str, str]:
         """
         Main entry point.
         • Returns the processed text if it is already cached.
@@ -150,29 +151,30 @@ class ArticleRepository:
         async with self._lock:
             row = self._row_for_url(url)
 
-            if row and row[3]:                          # row = (id, url, raw, processed)
+            if row:                          # row = (id, url, title, raw, processed)
                 LOGGER.info(f"[ArticleRepository] Found cached article for {url}")
-                return row[3]                           # processed_html already present
+                return row[2], row[4]                           # processed_html already present
 
         LOGGER.info(f"[ArticleRepository] Downloading article for {url}")
-        raw_html = await PlaywrightPool.fetch_html(url)
+        title, raw_html = await PlaywrightPool.fetch_html(url)
         processed_html = process_html(raw_html)
 
         async with self._lock:
             # Upsert:
             self._conn.execute(
                 f"""
-                INSERT INTO {self._TABLE_NAME} (url, raw_html, processed_html)
-                VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type})
+                INSERT INTO {self._TABLE_NAME} (url, title, raw_html, processed_html)
+                VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type}, {self.cursor_type})
                 ON CONFLICT(url) DO UPDATE SET
+                    title=EXCLUDED.title,
                     raw_html=EXCLUDED.raw_html,
                     processed_html=EXCLUDED.processed_html
                 """,
-                (url, raw_html, processed_html),
+                (url, title, raw_html, processed_html),
             )
             self._conn.commit()
 
-        return processed_html
+        return title, processed_html
 
     def close(self) -> None:
         """Close the underlying DB connection."""
@@ -193,6 +195,7 @@ class ArticleRepository:
             CREATE TABLE IF NOT EXISTS {self._TABLE_NAME} (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 url            TEXT UNIQUE NOT NULL,
+                title          TEXT NOT NULL,
                 raw_html       TEXT NOT NULL,
                 processed_html TEXT NOT NULL
             )
@@ -202,7 +205,7 @@ class ArticleRepository:
 
     def _row_for_url(self, url: str) -> Optional[Tuple[Any, ...]]:
         cur = self._conn.cursor()
-        cur.execute(f"SELECT id, url, raw_html, processed_html FROM {self._TABLE_NAME} WHERE url = {self.cursor_type}", (url,))
+        cur.execute(f"SELECT id, url, title, raw_html, processed_html FROM {self._TABLE_NAME} WHERE url = {self.cursor_type}", (url,))
         return cur.fetchone()
 
     @staticmethod

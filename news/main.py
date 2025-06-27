@@ -9,10 +9,11 @@ import discord
 from dotenv import load_dotenv
 import re
 from pool import PlaywrightPool, ArticleRepository
-import trafilatura
 import io
-
-from playwright.async_api import async_playwright, Browser, BrowserContext, Page
+from ollama import chat
+from ollama import ChatResponse
+from ollama import Client
+from ollama import AsyncClient
 
 load_dotenv()
 
@@ -32,6 +33,17 @@ logging.basicConfig(
 )
 
 article_repository = ArticleRepository()
+
+async def send_chat(messages):
+    return await AsyncClient(host="192.168.69.3:11434").chat(
+        model="deepseek-r1:8b",
+        messages=messages,
+        stream=False,
+        options={
+            'temperature': 0.5,
+            "num_ctx": 128000
+        },
+        think=True)
 
 async def send_text_file(channel: discord.abc.Messageable, content: str, filename: str = "article.md") -> None:
     fp = io.BytesIO(content.encode("utf-8"))

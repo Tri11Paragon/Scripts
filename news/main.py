@@ -36,19 +36,20 @@ article_repository = ArticleRepository()
 
 async def send_chat(messages, fmt):
     return await AsyncClient(host="192.168.69.3:11434").chat(
-        model="deepseek-r1:8b",
+        # model="deepseek-r1:1.5b",
+        model="gemma3:12b-it-qat",
         messages=messages,
         stream=False,
         options={
             'temperature': 0.5,
             # "num_ctx": 128000
         },
-        think=True)
+        think=False)
 
-async def send_text_file(channel: discord.abc.Messageable, content: str, filename: str = "article.md") -> None:
+async def send_text_file(channel: discord.abc.Messageable, content: str, message: str = "📄 Full article attached:", filename: str = "article.md") -> None:
     fp = io.BytesIO(content.encode("utf-8"))
     file = discord.File(fp, filename=filename)
-    await channel.send("📄 Full article attached:", file=file)
+    await channel.send(message, file=file)
 
 
 async def handle_article_url(message: discord.Message, url: str) -> None:
@@ -71,7 +72,8 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
             {"role": "system", "content": "You are an expert article-analysis assistant."
                                           # "You WILL respond in JSON format."
                                           "Your job is to analyse paragraphs in the article and look for provocative, emotionally charged, and loaded language"
-                                          "You will analyse the paragraphs, determine if they are provocative, and if so, output a capital X for each problematic word."
+                                          "You WILL analyse the paragraphs, determine if they are provocative, and if so, output a rating between 1 and 100, 100 being the most provocative."
+                                          "you WILL NOT output a summary of the article or the paragraphs."
                                           "Questions you should ask yourself while reading the paragraph:"
                                           "1. What is the literal meaning of the questionable word or phrase?"
                                           "2. What is the emotional or social context of the questionable word or phrase?"
@@ -82,6 +84,7 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
                                           "You will now be provided with the headline of the article then a paragraph from the article."
                                           "The headline (title of the page) will be provided as \"Headline\": \"EXAMPLE HEADLINE\"."
                                           "The paragraphs will be provided as \"Paragraph (numbered index)\": \"EXAMPLE PARAGRAPH\"."},
+            {"role": "user", "content": f"\"Headline\": \"{title}\""}
         ]
         messages.extend(processed_graphs)
         response = await send_chat(messages, "json")
@@ -89,9 +92,12 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
         # TODO: parse `html`, summarise, etc.
         await message.channel.send(f"✅ Article downloaded – {len(processed_html):,} bytes.")
         await send_text_file(message.channel, processed_html)
-        await send_text_file(message.channel, response['response'])
+        # await message.channel.send("Sending thinking portion:")
+        # await send_text_file(message.channel, response.message.thinking)
+        await message.channel.send("Sending response portion:")
+        await send_text_file(message.channel, response.message.content)
     except Exception as exc:
-        await message.channel.send("❌ Sorry, I couldn't fetch that page.")
+        await message.channel.send("❌ Sorry, an internal error has occurred. Please try again later or contact an administrator.")
         await message.channel.send(f"```\n{exc}\n```")
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import collections
 import logging
 import os
 from typing import Final, Optional, List
@@ -61,6 +62,29 @@ facts_system_prompt = ("You are a specialized analysis program designed to deter
                        "If the article only presents opinions about genocide, then it is not accurately representing what happened). "
                        "You WILL give rating of this article by calling the increment tool if you read a paragraph (seperated by newlines) which is accurately representing facts, and decrement if it is not.")
 
+class ChatBot:
+    def __init__(self, system : str, host : str="192.168.69.3:11434"):
+        self.client = AsyncClient(host=host)
+        self.messages = []
+        self.system = system
+        self.model = "llama3.2:3b"
+        self.clear()
+
+    async def send_message(self, message : str):
+        self.messages.append({"role": "user", "content": message})
+        response = await self.client.chat(
+            model=self.model,
+            messages=self.messages,
+            stream=False)
+        self.messages.append({"role": "assistant", "content": response["message"]["content"]})
+
+    async def set_model(self, model : str):
+        self.model = model
+
+    async def clear(self):
+        self.messages = []
+        self.messages.append({"role": "system", "content": self.system})
+
 async def send_chat(model, messages, tools = None):
     return await AsyncClient(host="192.168.69.3:11434").chat(
         model=model,
@@ -77,7 +101,7 @@ async def send_chat_with_system(model, message, system, tools = None):
     messages = [{'role': 'system', 'content': system}, {'role': 'user', 'content': message}]
     return await send_chat(model, messages, tools)
 
-async def send_text_file(channel: discord.abc.Messageable, content: str, message: str = "📄 Full article attached:", filename: str = "article.md") -> None:
+async def send_text_file(channel: discord.abc.Messageable, content: str | collections.abc.Sequence[str], message: str = "📄 Full article attached:", filename: str = "article.md") -> None:
     fp = io.BytesIO(content.encode("utf-8"))
     file = discord.File(fp, filename=filename)
     await channel.send(message, file=file)
@@ -148,15 +172,11 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
         time.sleep(0.1)
         await send_text_file(message.channel, social["message"]["content"], "Social calculations:")
         time.sleep(0.1)
-        await message.channel.send(f"Social+ {social_increment} | Social- {social_decrement}")
+        await message.channel.send(f"Social+ {social_increment} | Social- {social_decrement} + Capital+ {capital_increment} | Capital- {capital_decrement} + Facts+ {facts_increment} | Facts- {facts_decrement}")
         time.sleep(0.1)
         await send_text_file(message.channel, capital["message"]["content"], "capital calculations:")
         time.sleep(0.1)
-        await message.channel.send(f"Capital+ {capital_increment} | Capital- {capital_decrement}")
-        time.sleep(0.1)
         await send_text_file(message.channel, facts["message"]["content"], "facts calculations:")
-        time.sleep(0.1)
-        await message.channel.send(f"Facts+ {facts_increment} | Facts- {facts_decrement}")
         time.sleep(0.1)
     except Exception as exc:
         await message.channel.send("❌ Sorry, an internal error has occurred. Please try again later or contact an administrator.")

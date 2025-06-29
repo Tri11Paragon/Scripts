@@ -14,6 +14,7 @@ from ollama import chat
 from ollama import ChatResponse
 from ollama import Client
 from ollama import AsyncClient
+import time
 
 load_dotenv()
 
@@ -34,75 +35,133 @@ logging.basicConfig(
 
 article_repository = ArticleRepository()
 
-async def send_chat(model, messages):
-    # return await AsyncClient(host="192.168.69.3:11434").chat(
-    #     # model="deepseek-r1:1.5b",
-    #     model="gemma3:12b-it-qat",
-    #     messages=messages,
-    #     stream=False,
-    #     options={
-    #         'temperature': 0.5,
-    #         # "num_ctx": 128000
-    #     },
-    #     think=False)
-    return await AsyncClient(host="192.168.69.3:11434").generate(model=model, prompt=messages, stream=False)
+social_system_prompt = ("You are a specialized analysis program designed to determine if articles are pro-social. "
+                        "Pro-social text contains topics such as raising concerns about the negative effects on workers, the environment, "
+                        "or on society as a whole (as in the concerns of the 99%, or the proletariat). "
+                        "You WILL give rating of this article by calling the increment tool if you read a paragraph (seperated by newlines) which is pro-society, and decrement if it is anti-society. "
+                        "You WILL respond explaining why you have called the tools you did. "
+                        "You ARE allowed to answer with \"this article doesn't require social analysis\" if the topic is not relevant to social interests. "
+                        "You ARE allowed to not make calls to your tools if the topic is not relevant to social interests. ")
+
+capital_system_prompt = ("You are a specialized analysis program designed to determine if articles are pro-capital. "
+                         "Pro-capital text is concerned but not limited to the interests of business, or of the rich and elite. "
+                         "You WILL give rating of this article by calling the increment tool if you read a paragraph (seperated by newlines) which is pro-capital, and decrement if it is anti-capital. "
+                         "you ARE allowed to call the tools multiple times. "
+                         "You WILL respond explaining why you have called the tools you did. "
+                         "You ARE allowed to answer with \"this article doesn't require capital analysis\" if the topic is not relevant to capital interests. "
+                         "You ARE allowed to not make calls to your tools if the topic is not relevant to capital interests. ")
+
+facts_system_prompt = ("You are a specialized analysis program designed to determine if articles are attempting to accurately represent facts. "
+                       "You are not checking if the facts presented in the article are correct, "
+                       "rather you are to determine if an attempt was made to represent multiple sides of the issue. "
+                       "This can range from only presenting the news in the form of events that happened or expert comments "
+                       "(therefore not introducing the writer's opinion into the article), to not using too much emotional language "
+                       "(emotional language can be fine, if for example the article is trying to communicate that one side has commited genocide, "
+                       "it is okay to be emotional over that topic and should probably be encouraged. "
+                       "If the article only presents opinions about genocide, then it is not accurately representing what happened). "
+                       "You WILL give rating of this article by calling the increment tool if you read a paragraph (seperated by newlines) which is accurately representing facts, and decrement if it is not.")
+
+async def send_chat(model, messages, tools = None):
+    return await AsyncClient(host="192.168.69.3:11434").chat(
+        model=model,
+        messages=messages,
+        stream=False,
+        tools=tools,
+        options={
+            'temperature': 0.5,
+            # "num_ctx": 128000
+        })
+    # return await AsyncClient(host="192.168.69.3:11434").generate(model=model, prompt=messages, stream=False)
+
+async def send_chat_with_system(model, message, system, tools = None):
+    messages = [{'role': 'system', 'content': system}, {'role': 'user', 'content': message}]
+    return await send_chat(model, messages, tools)
 
 async def send_text_file(channel: discord.abc.Messageable, content: str, message: str = "📄 Full article attached:", filename: str = "article.md") -> None:
     fp = io.BytesIO(content.encode("utf-8"))
     file = discord.File(fp, filename=filename)
     await channel.send(message, file=file)
 
+def tally_responses(tools):
+    increment = 0
+    decrement = 0
+    if tools:
+        for tool in tools:
+            if tool['function']['name'] == "increment":
+                increment += 1
+            elif tool['function']['name'] == "decrement":
+                decrement += 1
+            else:
+                LOGGER.warning(f"Unknown tool: {tool}")
+    return increment, decrement
+
 
 async def handle_article_url(message: discord.Message, url: str) -> None:
-    """
-    Placeholder: download + analyse the article here.
-
-    Currently just acknowledges receipt so you can verify the event flow.
-    """
     LOGGER.info("Received URL from %s: %s", message.author, url)
 
     try:
         title, processed_html = await article_repository.get_article(url)
-        paragraphs = processed_html.split("\n")
-        paragraphs = [f"\"Paragraph ({i + 1})\": {paragraph.strip()}" for i, paragraph in enumerate(paragraphs)]
-        processed_graphs = [{"role": "user", "content": paragraph} for paragraph in paragraphs]
-        # print(paragraphs)
-        # print(processed_graphs)
 
-        # messages = [
-        #     {"role": "system", "content": "You are an expert article-analysis assistant."
-        #                                   # "You WILL respond in JSON format."
-        #                                   "Your job is to analyse paragraphs in the article and look for provocative, emotionally charged, and loaded language"
-        #                                   "You WILL analyse the paragraphs, determine if they are provocative, and if so, output a rating between 1 and 100, 100 being the most provocative."
-        #                                   "you WILL NOT output a summary of the article or the paragraphs."
-        #                                   "Questions you should ask yourself while reading the paragraph:"
-        #                                   "1. What is the literal meaning of the questionable word or phrase?"
-        #                                   "2. What is the emotional or social context of the questionable word or phrase?"
-        #                                   "3. Does that word or phrase have any connotations, that is, associations that are positive or negative?"
-        #                                   "4. What group (sometimes called a “discourse community”) favors one locution over another, and why?"
-        #                                   "5. Is the word or phrase “loaded”?  How far does it steer us from neutral?"
-        #                                   "6. Does the word or phrase help me see, or does it prevent me from seeing? (This is important)"
-        #                                   "You will now be provided with the headline of the article then a paragraph from the article."
-        #                                   "The headline (title of the page) will be provided as \"Headline\": \"EXAMPLE HEADLINE\"."
-        #                                   "The paragraphs will be provided as \"Paragraph (numbered index)\": \"EXAMPLE PARAGRAPH\"."},
-        #     {"role": "user", "content": f"\"Headline\": \"{title}\""}
-        # ]
-        # messages.extend(processed_graphs)
-        social = await send_chat("social", processed_html)
-        capital = await send_chat("capital", processed_html)
-        facts = await send_chat("facts", processed_html)
+        tools = [
+            {
+                'type': 'function',
+                'function': {
+                    'name': 'increment',
+                    'description': 'increment internal counter by 1',
+                    'parameters': {
+                        'type': 'object',
+                        'properties': {},
+                        'required': []
+                    }
+                }
+            },
+            {
+                'type': 'function',
+                'function': {
+                    'name': 'decrement',
+                    'description': 'decrement internal counter by 1',
+                    'parameters': {
+                        'type': 'object',
+                        'properties': {},
+                        'required': []
+                    }
+                }
+            }
+        ]
+
+        social = await send_chat_with_system("social", processed_html, social_system_prompt, tools)
+        capital = await send_chat_with_system("capital", processed_html, capital_system_prompt, tools)
+        facts = await send_chat_with_system("facts", processed_html, facts_system_prompt, tools)
+
         print(social)
         print(capital)
         print(facts)
+
+        social_increment, social_decrement = tally_responses(social['message']["tool_calls"])
+        capital_increment, capital_decrement = tally_responses(capital['message']["tool_calls"])
+        facts_increment, facts_decrement = tally_responses(facts['message']["tool_calls"])
+
         # TODO: parse `html`, summarise, etc.
         await message.channel.send(f"✅ Article downloaded – {len(processed_html):,} bytes.")
+        time.sleep(0.1)
         await send_text_file(message.channel, processed_html)
-        await send_text_file(message.channel, social.response, "Social calculations:")
-        await send_text_file(message.channel, capital.response, "capital calculations:")
-        await send_text_file(message.channel, facts.response, "facts calculations:")
+        time.sleep(0.1)
+        await send_text_file(message.channel, social["message"]["content"], "Social calculations:")
+        time.sleep(0.1)
+        await message.channel.send(f"Social+ {social_increment} | Social- {social_decrement}")
+        time.sleep(0.1)
+        await send_text_file(message.channel, capital["message"]["content"], "capital calculations:")
+        time.sleep(0.1)
+        await message.channel.send(f"Capital+ {capital_increment} | Capital- {capital_decrement}")
+        time.sleep(0.1)
+        await send_text_file(message.channel, facts["message"]["content"], "facts calculations:")
+        time.sleep(0.1)
+        await message.channel.send(f"Facts+ {facts_increment} | Facts- {facts_decrement}")
+        time.sleep(0.1)
     except Exception as exc:
         await message.channel.send("❌ Sorry, an internal error has occurred. Please try again later or contact an administrator.")
         await message.channel.send(f"```\n{exc}\n```")
+        LOGGER.error(exc, exc_info=True)
 
 
 def extract_first_url(text: str) -> Optional[str]:

@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Final, Optional, List, NamedTuple
 from dataclasses import dataclass
-from textwrap import wrap
+from textwrap import wrap, fill
 
 import discord
 from dotenv import load_dotenv
@@ -84,6 +84,9 @@ relevance_system_prompt = ("You are a specialized analysis program designed to d
                            "Your response to this would then look like:\n"
                            "100")
 
+relevance_system_prompt_2 = "\n".join(["You are a specialized analysis program designed to determine if a paragraph is relevant to the topic of the article.",
+                                       "You will be given different inputs and prompts by the user, and you MUST respond with either YES for it is relevant to the paragraph or NO for it is not relevant to the paragraph."])
+
 @dataclass(frozen=True)
 class Response:
     response: ChatResponse
@@ -131,6 +134,10 @@ class ChatBot:
 
     async def set_model(self, model : str):
         self.model = model
+
+    def set_system(self, system : str):
+        self.system = system
+        self.clear()
 
     def clear(self):
         self.messages = []
@@ -220,13 +227,24 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
             "num_ctx": 4096
         })
 
+        summary_bot.set_system("You are a specialized analysis program designed to summarize articles into their key points.\n "
+                               "You WILL only output a comma seperated list of key points, up to a max of 10 key points. ")
+
+        parts = ",".join(sumr.content() for sumr in await summary_bot.multi_summary(processed_html, options={
+            "temperature": 0.5,
+            "num_ctx": 4096
+        }))
+
+        print(parts)
+
         summary_parts_string = [part.content() for part in summary_parts]
 
-        summary = "\nSummary: ".join(summary_parts_string)
+        summary = "\n".join(summary_parts_string)
 
         paragraphs = [para for para in processed_html.split("\n") if len(para.strip()) > 0]
 
         relevance_bot = ChatBot(relevance_system_prompt)
+        relevance_bot2 = ChatBot(relevance_system_prompt_2)
 
         paragraph_relevance = []
 
@@ -236,18 +254,26 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
                                                summary, "-----\n",
                                                "Paragraph:\n ",
                                                paragraph, "-----\n"]))
-            paragraph_relevance.append(response.content())
+            print(await relevance_bot2.send_message("The Paragraph you will analyze is as follows. DO NOT RESPOND TO THIS MESSAGE.\n\n" + paragraph))
+            res = await relevance_bot2.send_message("Given the following summary, how relevant is the paragraph to the article? Remember, please respond with either YES or NO.\n\n" + summary)
+            print(res)
+            keywords = parts.split(",")
+            restutions = []
+            for keyword in keywords:
+                restutions.append(await relevance_bot2.send_message("Given the following keyword, how relevant is the paragraph to the article? Remember, please respond with either YES or NO.\n\n" + keyword))
+            paragraph_relevance.append((response.content(), [*restutions, res]))
 
         for i, x in enumerate(paragraph_relevance):
-            paragraph_relevance[i] = str(int(x))
+            paragraph_relevance[i] = (int(x[0]), x[1])
 
-        average_relevance = sum(int(x) for x in paragraph_relevance) / len(paragraph_relevance)
-        median_relevance = int(sorted(paragraph_relevance)[len(paragraph_relevance) // 2])
+        average_relevance = sum(x[0] for x in paragraph_relevance) / len(paragraph_relevance)
+        median_relevance = int(sorted(ref[0] for ref in paragraph_relevance)[len(paragraph_relevance) // 2])
+
 
         relevance_cutoff = min(average_relevance, median_relevance)
-        LOGGER.info(f"Relevance cutoff: {relevance_cutoff}")
+        LOGGER.info(f"Relevance cutoff: {relevance_cutoff} From ({average_relevance}, {median_relevance})")
 
-        relevance_content = [para + " (" + res + "%)" for para, res in zip(paragraphs, paragraph_relevance) if int(res) >= relevance_cutoff]
+        relevance_content = [fill(para + " (" + str(res[0]) + "%) [" + res[1] + "]", 80) for para, res in zip(paragraphs, paragraph_relevance)]
         relevance_prompt = "\n\n".join(relevance_content)
 
         # social = await send_chat_with_system("social", processed_html, social_system_prompt, tools)

@@ -11,7 +11,7 @@ from typing import Final, Optional, Union, Protocol, Any, Tuple
 import logging
 
 def process_html(html):
-    return trafilatura.extract(html, output_format='markdown', include_images=True, include_formatting=True,
+    return trafilatura.extract(html, output_format='txt', include_images=True, include_formatting=True,
                         include_tables=True, include_comments=False, favor_recall=True)
 
 LOGGER = logging.getLogger("pool")

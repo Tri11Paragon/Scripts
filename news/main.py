@@ -4,7 +4,10 @@ import asyncio
 import collections
 import logging
 import os
-from typing import Final, Optional, List
+from pathlib import Path
+from typing import Final, Optional, List, NamedTuple
+from dataclasses import dataclass
+from textwrap import wrap
 
 import discord
 from dotenv import load_dotenv
@@ -62,6 +65,36 @@ facts_system_prompt = ("You are a specialized analysis program designed to deter
                        "If the article only presents opinions about genocide, then it is not accurately representing what happened). "
                        "You WILL give rating of this article by calling the increment tool if you read a paragraph (seperated by newlines) which is accurately representing facts, and decrement if it is not.")
 
+summary_system_prompt = ("You are a specialized analysis program designed to summarize articles. "
+                         "You WILL be given an article and you WILL output a summary of the article in less than 300 words. "
+                         "Do NOT include that you are attempting to meet the word count in your response.")
+
+relevance_system_prompt = ("You are a specialized analysis program designed to determine if a paragraph is relevant to the topic of the article. "
+                           "You will be given a summary of the article and a paragraph of text. "
+                           "You WILL respond with number between 0 and 100 indicating how relevant the paragraph is to the article."
+                           "You WILL NOT output anything else besides the number. "
+                           "An example response to a given input would be:\n "
+                           "-----\n"
+                           "Summary:\n "
+                           "The president of the United States has been in the White House for 20 years.\n"
+                           "-----\n"
+                           "Paragraph:\n"
+                           "\"The president of the United States has been in the White House for 20 years.\"\n"
+                           "-----\n"
+                           "Your response to this would then look like:\n"
+                           "100")
+
+@dataclass(frozen=True)
+class Response:
+    response: ChatResponse
+
+    def content(self):
+        return self.response["message"]["content"]
+
+    def tools(self):
+        return self.response["message"]["tool_calls"]
+
+
 class ChatBot:
     def __init__(self, system : str, host : str="192.168.69.3:11434"):
         self.client = AsyncClient(host=host)
@@ -70,18 +103,36 @@ class ChatBot:
         self.model = "llama3.2:3b"
         self.clear()
 
-    async def send_message(self, message : str):
+    async def send_message(self, message : str, **kwargs) -> Response:
         self.messages.append({"role": "user", "content": message})
         response = await self.client.chat(
             model=self.model,
             messages=self.messages,
-            stream=False)
+            stream=False,
+            **kwargs)
         self.messages.append({"role": "assistant", "content": response["message"]["content"]})
+        return Response(response)
+
+    async def single_chat(self, message : str, **kwargs) -> Response:
+        messages = [{"role": "system", "content": self.system}, {"role": "user", "content": message}]
+        return Response(await self.client.chat(
+            model=self.model,
+            messages=messages,
+            stream=False,
+            **kwargs
+        ))
+
+    async def multi_summary(self, message: str, **kwargs) -> list[Response]:
+        chunks = wrap(message, width=(4096 - len(self.system) - 64))
+        responses = []
+        for chunk in chunks:
+            responses.append(await self.single_chat(chunk, **kwargs))
+        return responses
 
     async def set_model(self, model : str):
         self.model = model
 
-    async def clear(self):
+    def clear(self):
         self.messages = []
         self.messages.append({"role": "system", "content": self.system})
 
@@ -101,10 +152,18 @@ async def send_chat_with_system(model, message, system, tools = None):
     messages = [{'role': 'system', 'content': system}, {'role': 'user', 'content': message}]
     return await send_chat(model, messages, tools)
 
-async def send_text_file(channel: discord.abc.Messageable, content: str | collections.abc.Sequence[str], message: str = "📄 Full article attached:", filename: str = "article.md") -> None:
-    fp = io.BytesIO(content.encode("utf-8"))
-    file = discord.File(fp, filename=filename)
-    await channel.send(message, file=file)
+async def send_text_file(channel: discord.abc.Messageable, *args: str | tuple[str,str], message: str = "📄 Full article attached:") -> None:
+    strings = []
+    names = []
+    for i, arg in enumerate(args):
+        if isinstance(arg, tuple):
+            strings.append(arg[1])
+            names.append(arg[0])
+        else:
+            strings.append(arg)
+            names.append("Unnamed_file_" + str(i) + ".txt")
+    files = [discord.File(io.BytesIO(text.encode("utf-8")), filename=name) for name, text in zip(names, strings)]
+    await channel.send(message, files=files)
 
 def tally_responses(tools):
     increment = 0
@@ -153,35 +212,68 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
             }
         ]
 
-        social = await send_chat_with_system("social", processed_html, social_system_prompt, tools)
-        capital = await send_chat_with_system("capital", processed_html, capital_system_prompt, tools)
-        facts = await send_chat_with_system("facts", processed_html, facts_system_prompt, tools)
+        summary_bot = ChatBot(summary_system_prompt)
 
-        print(social)
-        print(capital)
-        print(facts)
+        summary_parts = await summary_bot.multi_summary(processed_html, options={
+            "temperature": 0.5,
+            "num_predict": 300,
+            "num_ctx": 4096
+        })
 
-        social_increment, social_decrement = tally_responses(social['message']["tool_calls"])
-        capital_increment, capital_decrement = tally_responses(capital['message']["tool_calls"])
-        facts_increment, facts_decrement = tally_responses(facts['message']["tool_calls"])
+        summary_parts_string = [part.content() for part in summary_parts]
+
+        summary = "\nSummary: ".join(summary_parts_string)
+
+        paragraphs = [para for para in processed_html.split("\n") if len(para.strip()) > 0]
+
+        relevance_bot = ChatBot(relevance_system_prompt)
+
+        paragraph_relevance = []
+
+        for paragraph in paragraphs:
+            response = await relevance_bot.single_chat("".join(["-----\n",
+                                               "Summary:\n ",
+                                               summary, "-----\n",
+                                               "Paragraph:\n ",
+                                               paragraph, "-----\n"]))
+            paragraph_relevance.append(response.content())
+
+        for i, x in enumerate(paragraph_relevance):
+            paragraph_relevance[i] = str(int(x))
+
+        average_relevance = sum(int(x) for x in paragraph_relevance) / len(paragraph_relevance)
+        median_relevance = int(sorted(paragraph_relevance)[len(paragraph_relevance) // 2])
+
+        relevance_cutoff = min(average_relevance, median_relevance)
+        LOGGER.info(f"Relevance cutoff: {relevance_cutoff}")
+
+        relevance_content = [para + " (" + res + "%)" for para, res in zip(paragraphs, paragraph_relevance) if int(res) >= relevance_cutoff]
+        relevance_prompt = "\n\n".join(relevance_content)
+
+        # social = await send_chat_with_system("social", processed_html, social_system_prompt, tools)
+        # capital = await send_chat_with_system("capital", processed_html, capital_system_prompt, tools)
+        # facts = await send_chat_with_system("facts", processed_html, facts_system_prompt, tools)
+
+        # print(social)
+        # print(capital)
+        # print(facts)
+
+        # social_increment, social_decrement = tally_responses(social['message']["tool_calls"])
+        # capital_increment, capital_decrement = tally_responses(capital['message']["tool_calls"])
+        # facts_increment, facts_decrement = tally_responses(facts['message']["tool_calls"])
 
         # TODO: parse `html`, summarise, etc.
         await message.channel.send(f"✅ Article downloaded – {len(processed_html):,} bytes.")
+        # time.sleep(0.1)
+        # await message.channel.send(f"Social+ {social_increment} | Social- {social_decrement} + Capital+ {capital_increment} | Capital- {capital_decrement} + Facts+ {facts_increment} | Facts- {facts_decrement}")
         time.sleep(0.1)
-        await send_text_file(message.channel, processed_html)
-        time.sleep(0.1)
-        await send_text_file(message.channel, social["message"]["content"], "Social calculations:")
-        time.sleep(0.1)
-        await message.channel.send(f"Social+ {social_increment} | Social- {social_decrement} + Capital+ {capital_increment} | Capital- {capital_decrement} + Facts+ {facts_increment} | Facts- {facts_decrement}")
-        time.sleep(0.1)
-        await send_text_file(message.channel, capital["message"]["content"], "capital calculations:")
-        time.sleep(0.1)
-        await send_text_file(message.channel, facts["message"]["content"], "facts calculations:")
+        # await send_text_file(message.channel, [processed_html, summary, social["message"]["content"], capital["message"]["content"], facts["message"]["content"]], "Files")
+        await send_text_file(message.channel, ("Raw Article.txt", processed_html), ("Summary.txt", summary), ("Paragraph Relevance.txt", relevance_prompt), message="Files")
         time.sleep(0.1)
     except Exception as exc:
         await message.channel.send("❌ Sorry, an internal error has occurred. Please try again later or contact an administrator.")
-        await message.channel.send(f"```\n{exc}\n```")
         LOGGER.error(exc, exc_info=True)
+        await message.channel.send(f"```\n{exc}\n```")
 
 
 def extract_first_url(text: str) -> Optional[str]:

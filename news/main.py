@@ -273,7 +273,7 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
         relevance_cutoff = min(average_relevance, median_relevance)
         LOGGER.info(f"Relevance cutoff: {relevance_cutoff} From ({average_relevance}, {median_relevance})")
 
-        relevance_content = [fill(para + " (" + str(res[0]) + "%) [" + res[1] + "]", 80) for para, res in zip(paragraphs, paragraph_relevance)]
+        relevance_content = [fill(para + " (" + str(res[0]) + "%) [" + ",".join(res[1]) + "]", 80) for para, res in zip(paragraphs, paragraph_relevance)]
         relevance_prompt = "\n\n".join(relevance_content)
 
         # social = await send_chat_with_system("social", processed_html, social_system_prompt, tools)

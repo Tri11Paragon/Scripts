@@ -185,13 +185,23 @@ class ArticleRepository:
             rows = cur.execute(f"""
                 INSERT INTO topics (article_id, topic_text, type) 
                 VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type})
+                RETURNING id;
             """, (article_id, summary, "summary"))
 
             summary_id = rows.fetchone()[0]
             cur.execute(f"""
-                INSERT INTO topic_ratings (paragraph_id, topic_id, rating) 
-            """)
+                INSERT INTO topic_ratings (article_id, topic_id, rating) VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type}) 
+                RETURNING id;
+            """, (article_id, summary_id, summary_ratings))
 
+            topic_ids = []
+            for topic in topics:
+                rows = cur.execute(f"""
+                    INSERT INTO topics (article_id, topic_text, type) 
+                    VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type})
+                    RETURNING id;
+                """, (article_id, topic, "keypoint"))
+                topic_ids.append(rows.fetchone()[0])
 
             for paragraph in paragraphs:
                 rows = cur.execute(f"""
@@ -201,13 +211,11 @@ class ArticleRepository:
                 """, (article_id, paragraph))
 
                 paragraph_id = rows.fetchone()[0]
-                for topic, rating in zip(topics, topic_ratings):
+                for topic_id, rating in zip(topic_ids, topic_ratings):
                     self._conn.execute(f"""
                         INSERT INTO paragraph_topic_ratings (paragraph_id, topic_id, rating) 
                         VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type})
-                    """, (paragraph_id, topic, rating))
-
-
+                    """, (paragraph_id, topic_id, rating))
 
             self._conn.commit()
 
@@ -253,8 +261,8 @@ class ArticleRepository:
                 article_id     INTEGER,
                 paragraph_id   INTEGER,
                 topic_id       INTEGER NOT NULL,
-                rating         INTEGER NOT NULL,
-                primary key (paragraph_id, topic_id, article_id),
+                rating         FLOAT NOT NULL,
+                primary key (article_id, paragraph_id, topic_id),
                 unique (topic_id),
                 foreign key (paragraph_id) references paragraphs(id),
                 foreign key (topic_id) references topics(id),

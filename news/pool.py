@@ -163,7 +163,7 @@ class ArticleRepository:
             # Upsert:
             self._conn.execute(
                 f"""
-                INSERT INTO {self._TABLE_NAME} (url, title, raw_html, processed_html)
+                INSERT INTO articles (url, title, raw_html, processed_html)
                 VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type}, {self.cursor_type})
                 ON CONFLICT(url) DO UPDATE SET
                     title=EXCLUDED.title,
@@ -175,6 +175,43 @@ class ArticleRepository:
             self._conn.commit()
 
         return title, processed_html
+
+    async def set_paragraphs(self, url, paragraphs, summary, summary_ratings, topics, topic_ratings):
+        async with self._lock:
+            article_id = self._row_for_url(url)[0]
+
+            cur = self._conn.cursor()
+
+            rows = cur.execute(f"""
+                INSERT INTO topics (article_id, topic_text, type) 
+                VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type})
+            """, (article_id, summary, "summary"))
+
+            summary_id = rows.fetchone()[0]
+            cur.execute(f"""
+                INSERT INTO topic_ratings (paragraph_id, topic_id, rating) 
+            """)
+
+
+            for paragraph in paragraphs:
+                rows = cur.execute(f"""
+                    INSERT INTO paragraphs (article_id, paragraph_text) 
+                    VALUES ({self.cursor_type}, {self.cursor_type})
+                    RETURNING id;
+                """, (article_id, paragraph))
+
+                paragraph_id = rows.fetchone()[0]
+                for topic, rating in zip(topics, topic_ratings):
+                    self._conn.execute(f"""
+                        INSERT INTO paragraph_topic_ratings (paragraph_id, topic_id, rating) 
+                        VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type})
+                    """, (paragraph_id, topic, rating))
+
+
+
+            self._conn.commit()
+
+
 
     def close(self) -> None:
         """Close the underlying DB connection."""
@@ -192,12 +229,37 @@ class ArticleRepository:
         # `ON CONFLICT` (mainly older MySQL) could be added here.
         self._conn.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {self._TABLE_NAME} (
+            CREATE TABLE IF NOT EXISTS articles (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 url            TEXT UNIQUE NOT NULL,
                 title          TEXT NOT NULL,
                 raw_html       TEXT NOT NULL,
                 processed_html TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS paragraphs (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                article_id     INTEGER NOT NULL,
+                paragraph_text TEXT NOT NULL,
+                foreign key (article_id) references articles(id)
+            );
+            CREATE TABLE IF NOT EXISTS topics (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                article_id     INTEGER NOT NULL,
+                topic_text     TEXT NOT NULL,
+                type           TEXT NOT NULL,
+                foreign key (article_id) references articles(id)
+            );
+            CREATE TABLE IF NOT EXISTS topic_ratings (
+                article_id     INTEGER,
+                paragraph_id   INTEGER,
+                topic_id       INTEGER NOT NULL,
+                rating         INTEGER NOT NULL,
+                primary key (paragraph_id, topic_id, article_id),
+                unique (topic_id),
+                foreign key (paragraph_id) references paragraphs(id),
+                foreign key (topic_id) references topics(id),
+                CHECK ((article_id IS NOT NULL AND paragraph_id IS NULL)
+                        OR (article_id IS NULL     AND paragraph_id IS NOT NULL))
             )
             """
         )
@@ -205,7 +267,7 @@ class ArticleRepository:
 
     def _row_for_url(self, url: str) -> Optional[Tuple[Any, ...]]:
         cur = self._conn.cursor()
-        cur.execute(f"SELECT id, url, title, raw_html, processed_html FROM {self._TABLE_NAME} WHERE url = {self.cursor_type}", (url,))
+        cur.execute(f"SELECT id, url, title, raw_html, processed_html FROM articles WHERE url = {self.cursor_type}", (url,))
         return cur.fetchone()
 
     @staticmethod

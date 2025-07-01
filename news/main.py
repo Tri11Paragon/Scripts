@@ -276,18 +276,6 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
         relevance_content = [fill(para + " (" + str(res[0]) + "%) [" + ",".join(res[1]) + "]", 80) for para, res in zip(paragraphs, paragraph_relevance)]
         relevance_prompt = "\n\n".join(relevance_content)
 
-        # social = await send_chat_with_system("social", processed_html, social_system_prompt, tools)
-        # capital = await send_chat_with_system("capital", processed_html, capital_system_prompt, tools)
-        # facts = await send_chat_with_system("facts", processed_html, facts_system_prompt, tools)
-
-        # print(social)
-        # print(capital)
-        # print(facts)
-
-        # social_increment, social_decrement = tally_responses(social['message']["tool_calls"])
-        # capital_increment, capital_decrement = tally_responses(capital['message']["tool_calls"])
-        # facts_increment, facts_decrement = tally_responses(facts['message']["tool_calls"])
-
         # TODO: parse `html`, summarise, etc.
         await message.channel.send(f"✅ Article downloaded – {len(processed_html):,} bytes.")
         # time.sleep(0.1)

@@ -189,10 +189,6 @@ class ArticleRepository:
             """, (article_id, summary, "summary"))
 
             summary_id = rows.fetchone()[0]
-            cur.execute(f"""
-                INSERT INTO topic_ratings (article_id, topic_id, rating) VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type}) 
-                RETURNING id;
-            """, (article_id, summary_id, summary_ratings))
 
             topic_ids = []
             for topic in topics:
@@ -203,7 +199,7 @@ class ArticleRepository:
                 """, (article_id, topic, "keypoint"))
                 topic_ids.append(rows.fetchone()[0])
 
-            for paragraph in paragraphs:
+            for paragraph, summary_rating, gel in zip(paragraphs, summary_ratings, topic_ratings):
                 rows = cur.execute(f"""
                     INSERT INTO paragraphs (article_id, paragraph_text) 
                     VALUES ({self.cursor_type}, {self.cursor_type})
@@ -211,9 +207,14 @@ class ArticleRepository:
                 """, (article_id, paragraph))
 
                 paragraph_id = rows.fetchone()[0]
-                for topic_id, rating in zip(topic_ids, topic_ratings):
+
+                cur.execute(f"""
+                    INSERT INTO topic_ratings (paragraph_id, topic_id, rating) VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type}) 
+                """, (paragraph_id, summary_id, float(summary_rating)))
+
+                for topic_id, rating in zip(topic_ids, gel):
                     self._conn.execute(f"""
-                        INSERT INTO paragraph_topic_ratings (paragraph_id, topic_id, rating) 
+                        INSERT INTO topic_ratings (paragraph_id, topic_id, rating) 
                         VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type})
                     """, (paragraph_id, topic_id, rating))
 
@@ -258,16 +259,12 @@ class ArticleRepository:
                 foreign key (article_id) references articles(id)
             );
             CREATE TABLE IF NOT EXISTS topic_ratings (
-                article_id     INTEGER,
                 paragraph_id   INTEGER,
                 topic_id       INTEGER NOT NULL,
                 rating         FLOAT NOT NULL,
-                primary key (article_id, paragraph_id, topic_id),
-                unique (topic_id),
+                primary key (paragraph_id, topic_id),
                 foreign key (paragraph_id) references paragraphs(id),
-                foreign key (topic_id) references topics(id),
-                CHECK ((article_id IS NOT NULL AND paragraph_id IS NULL)
-                        OR (article_id IS NULL     AND paragraph_id IS NOT NULL))
+                foreign key (topic_id) references topics(id)
             )
             """
         )

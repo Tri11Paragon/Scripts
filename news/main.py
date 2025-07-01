@@ -258,10 +258,11 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
         for i, x in enumerate(paragraph_relevance):
             paragraph_relevance[i] = int(x)
 
+        await article_repository.set_paragraphs(url, paragraphs, summary, paragraph_relevance, keywords, paragraph_restitutions)
+
         average_relevance = (sum(int(x) for x in paragraph_relevance) / len(paragraph_relevance) + sum(paragraph_keypoints)) / 2
         median_relevance = sorted(int(ref) for ref in paragraph_relevance)[len(paragraph_relevance) // 2]
         median_relevance2 = sorted(paragraph_keypoints)[len(paragraph_keypoints) // 2]
-
 
         relevance_cutoff = min(average_relevance, (median_relevance + median_relevance2) / 2)
         LOGGER.info(f"Relevance cutoff: {relevance_cutoff} From ({average_relevance}, {(median_relevance + median_relevance2) / 2})")

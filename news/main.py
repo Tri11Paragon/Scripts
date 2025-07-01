@@ -19,6 +19,7 @@ from ollama import ChatResponse
 from ollama import Client
 from ollama import AsyncClient
 import time
+import json
 
 load_dotenv()
 
@@ -34,7 +35,8 @@ bot = discord.Client(intents=intents)
 LOGGER = logging.getLogger("main")
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    format="%(asctime)s [%(levelname)s] %(name)s (in %(filename)s:%(lineno)d): %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
 )
 
 article_repository = ArticleRepository()
@@ -84,8 +86,10 @@ relevance_system_prompt = ("You are a specialized analysis program designed to d
                            "Your response to this would then look like:\n"
                            "100")
 
-relevance_system_prompt_2 = "\n".join(["You are a specialized analysis program designed to determine if a paragraph is relevant to the topic of the article.",
-                                       "You will be given different inputs and prompts by the user, and you MUST respond with either YES for it is relevant to the paragraph or NO for it is not relevant to the paragraph."])
+relevance_system_prompt_2 = "\n".join(["You are a specialized analysis program designed to determine if a paragraph is relevant to the "
+                                       "topic of the article based on various snippets and meta-information gathered from the article.",
+                                       "You will be given different inputs and prompts by the user where you MUST respond with a "
+                                       "YES or NO depending on if that input is relevant to the paragraph."])
 
 @dataclass(frozen=True)
 class Response:
@@ -172,18 +176,18 @@ async def send_text_file(channel: discord.abc.Messageable, *args: str | tuple[st
     files = [discord.File(io.BytesIO(text.encode("utf-8")), filename=name) for name, text in zip(names, strings)]
     await channel.send(message, files=files)
 
-def tally_responses(tools):
-    increment = 0
-    decrement = 0
-    if tools:
-        for tool in tools:
-            if tool['function']['name'] == "increment":
-                increment += 1
-            elif tool['function']['name'] == "decrement":
-                decrement += 1
-            else:
-                LOGGER.warning(f"Unknown tool: {tool}")
-    return increment, decrement
+def tally_responses(array: list[str]):
+    yes = 0
+    no = 0
+    err = 0
+    for a in array:
+        if a.upper() == "YES":
+            yes += 1
+        elif a.upper() == "NO":
+            no += 1
+        else:
+            err += 1
+    return yes, no, err
 
 
 async def handle_article_url(message: discord.Message, url: str) -> None:
@@ -191,33 +195,6 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
 
     try:
         title, processed_html = await article_repository.get_article(url)
-
-        tools = [
-            {
-                'type': 'function',
-                'function': {
-                    'name': 'increment',
-                    'description': 'increment internal counter by 1',
-                    'parameters': {
-                        'type': 'object',
-                        'properties': {},
-                        'required': []
-                    }
-                }
-            },
-            {
-                'type': 'function',
-                'function': {
-                    'name': 'decrement',
-                    'description': 'decrement internal counter by 1',
-                    'parameters': {
-                        'type': 'object',
-                        'properties': {},
-                        'required': []
-                    }
-                }
-            }
-        ]
 
         summary_bot = ChatBot(summary_system_prompt)
 
@@ -228,14 +205,18 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
         })
 
         summary_bot.set_system("You are a specialized analysis program designed to summarize articles into their key points.\n "
-                               "You WILL only output a comma seperated list of key points, up to a max of 10 key points. ")
+                               "You WILL only output a JSON list of key points, structured as {key_points: [\"keypoint1\", \"keypoint2\",...]}. ")
 
-        parts = ",".join(sumr.content() for sumr in await summary_bot.multi_summary(processed_html, options={
-            "temperature": 0.5,
-            "num_ctx": 4096
-        }))
-
-        print(parts)
+        try:
+            keywords = [item for sublist in (json.loads(sumr.content())["key_points"] for sumr in await summary_bot.multi_summary(processed_html, options={
+                "temperature": 0.5,
+                "num_ctx": 4096
+            })) for item in sublist]
+            LOGGER.info(keywords)
+        except Exception as exc:
+            LOGGER.error("Failed to correctly parse LLM output. It is likely that it has failed.")
+            LOGGER.error(exc, exc_info=True)
+            keywords = []
 
         summary_parts_string = [part.content() for part in summary_parts]
 
@@ -247,33 +228,45 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
         relevance_bot2 = ChatBot(relevance_system_prompt_2)
 
         paragraph_relevance = []
+        paragraph_restitutions = []
+        paragraph_keypoints = []
 
         for paragraph in paragraphs:
             response = await relevance_bot.single_chat("".join(["-----\n",
                                                "Summary:\n ",
                                                summary, "-----\n",
                                                "Paragraph:\n ",
-                                               paragraph, "-----\n"]))
-            print(await relevance_bot2.send_message("The Paragraph you will analyze is as follows. DO NOT RESPOND TO THIS MESSAGE.\n\n" + paragraph))
-            res = await relevance_bot2.send_message("Given the following summary, how relevant is the paragraph to the article? Remember, please respond with either YES or NO.\n\n" + summary)
-            print(res)
-            keywords = parts.split(",")
-            restutions = []
-            for keyword in keywords:
-                restutions.append(await relevance_bot2.send_message("Given the following keyword, how relevant is the paragraph to the article? Remember, please respond with either YES or NO.\n\n" + keyword))
-            paragraph_relevance.append((response.content(), [*restutions, res]))
+                                               paragraph, "-----\n"
+                                                                "REMEMBER: You WILL respond with number between 0 and 100 indicating how relevant the paragraph is to the article."]))
+            relevance_bot2.clear()
+            LOGGER.info(await relevance_bot2.send_message("DO NOT RESPOND TO THIS MESSAGE. The Paragraph you will analyze is as follows:\n\n" + paragraph))
+            res = await relevance_bot2.send_message("Is the paragraph relevant to the following summary? Remember, please respond with either YES or NO.\n\n" + summary)
+            LOGGER.info(f"Summary Relevancy using chat: {res.content()}")
+            restitutions = []
+            for keypoint in keywords:
+                keypoint_is_rev = await relevance_bot2.send_message(
+                    "A key point is an idea that the article is communicating to the reader. Given that, is the paragraph relevant to the following key point. Remember: Please respond with either YES or NO.\n\n" + keypoint)
+                LOGGER.info(f"Running for keyword {keypoint} got response {keypoint_is_rev.content()}")
+                restitutions.append(keypoint_is_rev.content())
+            restitutions.append(res.content())
+            yes, no, err = tally_responses(restitutions)
+            total = yes + no + err
+            paragraph_relevance.append(response.content())
+            paragraph_restitutions.append(restitutions)
+            paragraph_keypoints.append((yes / total) * 100)
 
         for i, x in enumerate(paragraph_relevance):
-            paragraph_relevance[i] = (int(x[0]), x[1])
+            paragraph_relevance[i] = int(x)
 
-        average_relevance = sum(x[0] for x in paragraph_relevance) / len(paragraph_relevance)
-        median_relevance = int(sorted(ref[0] for ref in paragraph_relevance)[len(paragraph_relevance) // 2])
+        average_relevance = (sum(int(x) for x in paragraph_relevance) / len(paragraph_relevance) + sum(paragraph_keypoints)) / 2
+        median_relevance = sorted(int(ref) for ref in paragraph_relevance)[len(paragraph_relevance) // 2]
+        median_relevance2 = sorted(paragraph_keypoints)[len(paragraph_keypoints) // 2]
 
 
-        relevance_cutoff = min(average_relevance, median_relevance)
-        LOGGER.info(f"Relevance cutoff: {relevance_cutoff} From ({average_relevance}, {median_relevance})")
+        relevance_cutoff = min(average_relevance, (median_relevance + median_relevance2) / 2)
+        LOGGER.info(f"Relevance cutoff: {relevance_cutoff} From ({average_relevance}, {(median_relevance + median_relevance2) / 2})")
 
-        relevance_content = [fill(para + " (" + str(res[0]) + "%) [" + ",".join(res[1]) + "]", 80) for para, res in zip(paragraphs, paragraph_relevance)]
+        relevance_content = [fill(para + " (" + str(res) + "%) [" + ",".join(li) + "]" + "(" + str(point) + "%)", 80) for para, res, li, point, in zip(paragraphs, paragraph_relevance, paragraph_restitutions, paragraph_keypoints)]
         relevance_prompt = "\n\n".join(relevance_content)
 
         # TODO: parse `html`, summarise, etc.

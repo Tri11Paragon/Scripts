@@ -244,30 +244,32 @@ class ArticleRepository:
                 title          TEXT NOT NULL,
                 raw_html       TEXT NOT NULL,
                 processed_html TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS paragraphs (
+            )
+            """
+        )
+        self._conn.execute("""CREATE TABLE IF NOT EXISTS paragraphs (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 article_id     INTEGER NOT NULL,
                 paragraph_text TEXT NOT NULL,
                 foreign key (article_id) references articles(id)
-            );
-            CREATE TABLE IF NOT EXISTS topics (
+            )
+            """)
+        self._conn.execute("""CREATE TABLE IF NOT EXISTS topics (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 article_id     INTEGER NOT NULL,
                 topic_text     TEXT NOT NULL,
                 type           TEXT NOT NULL,
                 foreign key (article_id) references articles(id)
-            );
-            CREATE TABLE IF NOT EXISTS topic_ratings (
+            )
+            """)
+        self._conn.execute("""CREATE TABLE IF NOT EXISTS topic_ratings (
                 paragraph_id   INTEGER,
                 topic_id       INTEGER NOT NULL,
                 rating         FLOAT NOT NULL,
                 primary key (paragraph_id, topic_id),
                 foreign key (paragraph_id) references paragraphs(id),
                 foreign key (topic_id) references topics(id)
-            )
-            """
-        )
+            )""")
         self._conn.commit()
 
     def _row_for_url(self, url: str) -> Optional[Tuple[Any, ...]]:

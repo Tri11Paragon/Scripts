@@ -183,10 +183,12 @@ class ArticleRepository:
             cur = self._conn.cursor()
 
             rows = cur.execute(f"""
-                INSERT INTO topics (article_id, topic_text, type) 
-                VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type})
-                RETURNING id;
-            """, (article_id, summary, "summary"))
+                INSERT INTO summaries (article_id, summary_text) 
+                VALUES ({self.cursor_type}, {self.cursor_type})
+                ON CONFLICT(article_id) DO UPDATE SET
+                summary_text=EXCLUDED.summary_text
+                RETURNING article_id;
+            """, (article_id, summary))
 
             summary_id = rows.fetchone()[0]
 
@@ -209,7 +211,7 @@ class ArticleRepository:
                 paragraph_id = rows.fetchone()[0]
 
                 cur.execute(f"""
-                    INSERT INTO topic_ratings (paragraph_id, topic_id, rating) VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type}) 
+                    INSERT INTO summary_ratings (paragraph_id, article_id, rating) VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type}) 
                 """, (paragraph_id, summary_id, float(summary_rating)))
 
                 for topic_id, rating in zip(topic_ids, gel):
@@ -258,17 +260,29 @@ class ArticleRepository:
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 article_id     INTEGER NOT NULL,
                 topic_text     TEXT NOT NULL,
-                type           TEXT NOT NULL,
                 foreign key (article_id) references articles(id)
             )
             """)
         self._conn.execute("""CREATE TABLE IF NOT EXISTS topic_ratings (
                 paragraph_id   INTEGER,
                 topic_id       INTEGER NOT NULL,
-                rating         FLOAT NOT NULL,
+                rating         BOOLEAN NOT NULL,
                 primary key (paragraph_id, topic_id),
                 foreign key (paragraph_id) references paragraphs(id),
                 foreign key (topic_id) references topics(id)
+            )""")
+        self._conn.execute("""CREATE TABLE IF NOT EXISTS summaries (
+                article_id   INTEGER PRIMARY KEY,
+                summary_text TEXT NOT NULL,
+                foreign key (article_id) references articles(id)
+            )""")
+        self._conn.execute("""CREATE TABLE IF NOT EXISTS summary_ratings (
+                paragraph_id   INTEGER NOT NULL,
+                article_id     INTEGER NOT NULL,
+                rating         FLOAT NOT NULL,
+                primary key (paragraph_id, article_id),
+                foreign key (paragraph_id) references paragraphs(id),
+                foreign key (article_id) references articles(id)           
             )""")
         self._conn.commit()
 

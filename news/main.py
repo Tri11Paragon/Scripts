@@ -205,6 +205,7 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
         })
 
         summary_bot.set_system("You are a specialized analysis program designed to summarize articles into their key points.\n "
+                               "You WILL output as many key points as possible, but you MUST output at least 1 key point.\n"
                                "You WILL only output a JSON list of key points, structured as {key_points: [\"keypoint1\", \"keypoint2\",...]}. ")
 
         try:

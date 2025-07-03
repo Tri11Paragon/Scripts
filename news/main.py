@@ -196,6 +196,13 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
     try:
         title, processed_html = await article_repository.get_article(url)
 
+        if await article_repository.has_paragraphs(url):
+            await message.channel.send("This article has already been processed.")
+            LOGGER.info(f"Article {url} already processed")
+            return
+
+        LOGGER.info(f"Article {url} has not been processed. Beginning now!")
+
         summary_bot = ChatBot(summary_system_prompt)
 
         summary_parts = await summary_bot.multi_summary(processed_html, options={

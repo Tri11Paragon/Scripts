@@ -176,6 +176,20 @@ class ArticleRepository:
 
         return title, processed_html
 
+    async def has_paragraphs(self, url) -> bool:
+        async with self._lock:
+            row = self._row_for_url(url)
+            if not row:
+                return False
+
+            cur = self._conn.cursor()
+            row = cur.execute(f"SELECT COUNT(*) FROM summaries WHERE article_id = {row[0]}")
+
+            result = row.fetchone()
+            if not row.fetchone() or row.fetchone()[0] == 0:
+                return False
+            return True
+
     async def set_paragraphs(self, url, paragraphs, summary, summary_ratings, topics, topic_ratings):
         async with self._lock:
             article_id = self._row_for_url(url)[0]

@@ -9,6 +9,7 @@ in pkgs.mkShell {
       python-dotenv
       trafilatura
       playwright
+	  flask
     ]))
   ];
   propagatedBuildInputs = with pkgs; [

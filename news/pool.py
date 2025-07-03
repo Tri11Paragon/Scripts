@@ -11,7 +11,7 @@ from typing import Final, Optional, Union, Protocol, Any, Tuple
 import logging
 
 def process_html(html):
-    return trafilatura.extract(html, output_format='txt', include_images=True, include_formatting=True,
+    return trafilatura.extract(html, output_format='markdown', include_images=True, include_formatting=True,
                         include_tables=True, include_comments=False, favor_recall=True)
 
 LOGGER = logging.getLogger("pool")
@@ -186,7 +186,7 @@ class ArticleRepository:
             row = cur.execute(f"SELECT COUNT(*) FROM summaries WHERE article_id = {row[0]}")
 
             result = row.fetchone()
-            if not row.fetchone() or row.fetchone()[0] == 0:
+            if not result or result[0] == 0:
                 return False
             return True
 
@@ -209,10 +209,10 @@ class ArticleRepository:
             topic_ids = []
             for topic in topics:
                 rows = cur.execute(f"""
-                    INSERT INTO topics (article_id, topic_text, type) 
-                    VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type})
+                    INSERT INTO topics (article_id, topic_text) 
+                    VALUES ({self.cursor_type}, {self.cursor_type})
                     RETURNING id;
-                """, (article_id, topic, "keypoint"))
+                """, (article_id, topic))
                 topic_ids.append(rows.fetchone()[0])
 
             for paragraph, summary_rating, gel in zip(paragraphs, summary_ratings, topic_ratings):

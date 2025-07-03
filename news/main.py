@@ -20,6 +20,10 @@ from ollama import Client
 from ollama import AsyncClient
 import time
 import json
+import server
+import threading
+from typing import NoReturn
+
 
 load_dotenv()
 
@@ -38,8 +42,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s (in %(filename)s:%(lineno)d): %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
-
-article_repository = ArticleRepository()
 
 social_system_prompt = ("You are a specialized analysis program designed to determine if articles are pro-social. "
                         "Pro-social text contains topics such as raising concerns about the negative effects on workers, the environment, "
@@ -194,9 +196,9 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
     LOGGER.info("Received URL from %s: %s", message.author, url)
 
     try:
-        title, processed_html = await article_repository.get_article(url)
+        title, processed_html = await server.article_repository.get_article(url)
 
-        if await article_repository.has_paragraphs(url):
+        if await server.article_repository.has_paragraphs(url):
             await message.channel.send("This article has already been processed.")
             LOGGER.info(f"Article {url} already processed")
             return
@@ -213,15 +215,19 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
 
         summary_bot.set_system("You are a specialized analysis program designed to summarize articles into their key points.\n "
                                "You WILL output as many key points as possible, but you MUST output at least 1 key point.\n"
-                               "You WILL only output a JSON list of key points, structured as {key_points: [\"keypoint1\", \"keypoint2\",...]}. ")
+                               "You WILL only output a JSON list of key points, structured as {key_points: [\"keypoint1\", \"keypoint2\",...]}. "
+                               "DO NOT OUTPUT ANYTHING BUT THE PROPERLY FORMATTED JSON.")
 
         try:
-            keywords = [item for sublist in (json.loads(sumr.content())["key_points"] for sumr in await summary_bot.multi_summary(processed_html, options={
+            silly = await summary_bot.multi_summary(processed_html, options={
                 "temperature": 0.5,
                 "num_ctx": 4096
-            })) for item in sublist]
+            }, format="json")
+            keywords = [item for sublist in (json.loads(sumr.content())["key_points"] for sumr in silly) for item in sublist]
             LOGGER.info(keywords)
         except Exception as exc:
+            for sil in silly:
+                LOGGER.error(sil.content())
             LOGGER.error("Failed to correctly parse LLM output. It is likely that it has failed.")
             LOGGER.error(exc, exc_info=True)
             keywords = []
@@ -257,6 +263,7 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
                 LOGGER.info(f"Running for keyword {keypoint} got response {keypoint_is_rev.content()}")
                 restitutions.append(keypoint_is_rev.content())
             restitutions.append(res.content())
+            LOGGER.info(f"Restitutions: {restitutions}")
             yes, no, err = tally_responses(restitutions)
             total = yes + no + err
             paragraph_relevance.append(response.content())
@@ -266,9 +273,9 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
         for i, x in enumerate(paragraph_relevance):
             paragraph_relevance[i] = int(x)
 
-        await article_repository.set_paragraphs(url, paragraphs, summary, paragraph_relevance, keywords, paragraph_restitutions)
+        await server.article_repository.set_paragraphs(url, paragraphs, summary, paragraph_relevance, keywords, paragraph_restitutions)
 
-        average_relevance = (sum(int(x) for x in paragraph_relevance) / len(paragraph_relevance) + sum(paragraph_keypoints)) / 2
+        average_relevance = ((sum(int(x) for x in paragraph_relevance) / len(paragraph_relevance)) + (sum(paragraph_keypoints) / len(paragraph_keypoints))) / 2
         median_relevance = sorted(int(ref) for ref in paragraph_relevance)[len(paragraph_relevance) // 2]
         median_relevance2 = sorted(paragraph_keypoints)[len(paragraph_keypoints) // 2]
 
@@ -340,14 +347,22 @@ async def on_message(message: discord.Message) -> None:
     # Launch the processing task without blocking Discord’s event loop
     asyncio.create_task(handle_article_url(message, url))
 
+def _run_flask_blocking() -> NoReturn:  # helper returns never
+    server.app.run(host="0.0.0.0", port=8000, debug=False, use_reloader=False)
+
+
 def main() -> None:
     if DISCORD_TOKEN is None:
         raise RuntimeError("Set the DISCORD_TOKEN environment variable or add it to a .env file.")
+
+    thread = threading.Thread(target=_run_flask_blocking, daemon=True, name="flask-api")
+    thread.start()
 
     try:
         bot.run(DISCORD_TOKEN)
     finally:
         asyncio.run(PlaywrightPool.stop())
+        server.article_repository.close()
 
 if __name__ == "__main__":
     main()

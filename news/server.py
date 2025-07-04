@@ -1,4 +1,4 @@
-from quart import Quart, request, jsonify, abort
+from quart import Quart, request, jsonify, abort, send_from_directory
 from pathlib import Path
 import logging
 
@@ -11,6 +11,10 @@ app = Quart(__name__)
 article_repository = ArticleRepository()
 
 LOGGER = logging.getLogger("server")
+
+@app.route("/")
+async def index():
+    return await send_from_directory("static", "index.html")
 
 @app.route("/health")
 async def health():

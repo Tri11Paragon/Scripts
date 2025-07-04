@@ -355,12 +355,12 @@ async def main():
         raise RuntimeError("Set the DISCORD_TOKEN environment variable or add it to a .env file.")
 
     try:
-        web_task = server.app.run_task(host="0.0.0.0", port=8000, debug=False)
-        discord_task = start_discord()
+        web_task = asyncio.create_task(server.app.run_task(host="0.0.0.0", port=8000, debug=False))
+        discord_task = asyncio.create_task(start_discord())
 
-        await asyncio.gather(web_task, discord_task)
+        await asyncio.wait({web_task, discord_task}, return_when=asyncio.FIRST_COMPLETED)
     finally:
-        await PlaywrightPool.stop()
+        # await PlaywrightPool.stop()
         server.article_repository.close()
 
         if not bot.is_closed():

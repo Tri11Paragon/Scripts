@@ -15,10 +15,6 @@ def process_html(html):
                         include_tables=True, include_comments=False, favor_recall=True)
 
 LOGGER = logging.getLogger("pool")
-# logging.basicConfig(
-#     level=logging.INFO,
-#     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-# )
 
 class PlaywrightPool:
     _pw = None           # playwright instance
@@ -140,7 +136,46 @@ class ArticleRepository:
     # ------------------------------------------------------------------ #
     # public API
     # ------------------------------------------------------------------ #
-    async def get_article(self, url: str) -> tuple[str, str]:
+
+    async def get_article_async(self, url: str) -> tuple[str, str]:
+        async with self._lock:
+            result = self._get_article(url)
+            if result:
+                return result
+
+            LOGGER.info(f"[ArticleRepository] Downloading article for {url}")
+            title, raw_html = await PlaywrightPool.fetch_html(url)
+            processed_html = process_html(raw_html)
+
+            # Upsert:
+            self._conn.execute(
+                f"""
+                        INSERT INTO articles (url, title, raw_html, processed_html)
+                        VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type}, {self.cursor_type})
+                        ON CONFLICT(url) DO UPDATE SET
+                            title=EXCLUDED.title,
+                            raw_html=EXCLUDED.raw_html,
+                            processed_html=EXCLUDED.processed_html
+                        """,
+                (url, title, raw_html, processed_html),
+            )
+            self._conn.commit()
+
+            return title, processed_html
+
+    def get_article(self, url: str) -> tuple[str, str] | None:
+        try:
+            self._lock.acquire()
+            return self._get_article(url)
+        except Exception as exc:
+            LOGGER.exception(f"[ArticleRepository] Error while getting article for {url}")
+            LOGGER.exception(exc)
+            return None
+        finally:
+            if self._lock.locked():
+                self._lock.release()
+
+    def _get_article(self, url: str) -> tuple[str, str] | None:
         """
         Main entry point.
         • Returns the processed text if it is already cached.
@@ -148,33 +183,14 @@ class ArticleRepository:
         """
 
         # Single writer at a time when using sqlite3 – avoids `database is locked`
-        async with self._lock:
-            row = self._row_for_url(url)
+        row = self._row_for_url(url)
 
-            if row:                          # row = (id, url, title, raw, processed)
-                LOGGER.info(f"[ArticleRepository] Found cached article for {url}")
-                return row[2], row[4]                           # processed_html already present
+        if row:                          # row = (id, url, title, raw, processed)
+            LOGGER.info(f"[ArticleRepository] Found cached article for {url}")
+            return row[2], row[4]                           # processed_html already present
 
-        LOGGER.info(f"[ArticleRepository] Downloading article for {url}")
-        title, raw_html = await PlaywrightPool.fetch_html(url)
-        processed_html = process_html(raw_html)
-
-        async with self._lock:
-            # Upsert:
-            self._conn.execute(
-                f"""
-                INSERT INTO articles (url, title, raw_html, processed_html)
-                VALUES ({self.cursor_type}, {self.cursor_type}, {self.cursor_type}, {self.cursor_type})
-                ON CONFLICT(url) DO UPDATE SET
-                    title=EXCLUDED.title,
-                    raw_html=EXCLUDED.raw_html,
-                    processed_html=EXCLUDED.processed_html
-                """,
-                (url, title, raw_html, processed_html),
-            )
-            self._conn.commit()
-
-        return title, processed_html
+        LOGGER.info(f"[ArticleRepository] Article was not found for {url}")
+        return None
 
     async def has_paragraphs(self, url) -> bool:
         async with self._lock:
@@ -189,6 +205,16 @@ class ArticleRepository:
             if not result or result[0] == 0:
                 return False
             return True
+
+    def get_latest_articles(self, count):
+        try:
+            self._lock.acquire()
+            cur = self._conn.cursor()
+            row = cur.execute(f"SELECT id, url, title, processed_html FROM articles ORDER BY id DESC LIMIT {self.cursor_type}", (count,))
+
+            return row.fetchall()
+        finally:
+            self._lock.release()
 
     async def set_paragraphs(self, url, paragraphs, summary, summary_ratings, topics, topic_ratings):
         async with self._lock:

@@ -196,7 +196,7 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
     LOGGER.info("Received URL from %s: %s", message.author, url)
 
     try:
-        title, processed_html = await server.article_repository.get_article(url)
+        title, processed_html = await server.article_repository.get_article_async(url)
 
         if await server.article_repository.has_paragraphs(url):
             await message.channel.send("This article has already been processed.")

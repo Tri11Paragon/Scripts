@@ -196,12 +196,12 @@ async def handle_article_url(message: discord.Message, url: str) -> None:
     LOGGER.info("Received URL from %s: %s", message.author, url)
 
     try:
-        title, processed_html = await server.article_repository.get_article_async(url)
-
         if await server.article_repository.has_paragraphs(url):
             await message.channel.send("This article has already been processed.")
             LOGGER.info(f"Article {url} already processed")
             return
+
+        title, processed_html = await server.article_repository.fetch_article(url)
 
         LOGGER.info(f"Article {url} has not been processed. Beginning now!")
 
@@ -347,22 +347,24 @@ async def on_message(message: discord.Message) -> None:
     # Launch the processing task without blocking Discord’s event loop
     asyncio.create_task(handle_article_url(message, url))
 
-def _run_flask_blocking() -> NoReturn:  # helper returns never
-    server.app.run(host="0.0.0.0", port=8000, debug=False, use_reloader=False)
+async def start_discord():
+    await bot.start(DISCORD_TOKEN)
 
-
-def main() -> None:
+async def main():
     if DISCORD_TOKEN is None:
         raise RuntimeError("Set the DISCORD_TOKEN environment variable or add it to a .env file.")
 
-    thread = threading.Thread(target=_run_flask_blocking, daemon=True, name="flask-api")
-    thread.start()
-
     try:
-        bot.run(DISCORD_TOKEN)
+        web_task = server.app.run_task(host="0.0.0.0", port=8000, debug=False)
+        discord_task = start_discord()
+
+        await asyncio.gather(web_task, discord_task)
     finally:
-        asyncio.run(PlaywrightPool.stop())
+        await PlaywrightPool.stop()
         server.article_repository.close()
 
+        if not bot.is_closed():
+            await bot.close()
+
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

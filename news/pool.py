@@ -137,9 +137,9 @@ class ArticleRepository:
     # public API
     # ------------------------------------------------------------------ #
 
-    async def get_article_async(self, url: str) -> tuple[str, str]:
+    async def fetch_article(self, url: str) -> tuple[str, str]:
         async with self._lock:
-            result = self._get_article(url)
+            result = await self.get_article(url)
             if result:
                 return result
 
@@ -163,34 +163,17 @@ class ArticleRepository:
 
             return title, processed_html
 
-    def get_article(self, url: str) -> tuple[str, str] | None:
-        try:
-            self._lock.acquire()
-            return self._get_article(url)
-        except Exception as exc:
-            LOGGER.exception(f"[ArticleRepository] Error while getting article for {url}")
-            LOGGER.exception(exc)
+    async def get_article(self, url: str) -> tuple[str, str] | None:
+        async with self._lock:
+            # Single writer at a time when using sqlite3 – avoids `database is locked`
+            row = self._row_for_url(url)
+
+            if row:                          # row = (id, url, title, raw, processed)
+                LOGGER.info(f"[ArticleRepository] Found cached article for {url}")
+                return row[2], row[4]                           # processed_html already present
+
+            LOGGER.info(f"[ArticleRepository] Article was not found for {url}")
             return None
-        finally:
-            if self._lock.locked():
-                self._lock.release()
-
-    def _get_article(self, url: str) -> tuple[str, str] | None:
-        """
-        Main entry point.
-        • Returns the processed text if it is already cached.
-        • Otherwise downloads it, processes it, stores it, and returns it.
-        """
-
-        # Single writer at a time when using sqlite3 – avoids `database is locked`
-        row = self._row_for_url(url)
-
-        if row:                          # row = (id, url, title, raw, processed)
-            LOGGER.info(f"[ArticleRepository] Found cached article for {url}")
-            return row[2], row[4]                           # processed_html already present
-
-        LOGGER.info(f"[ArticleRepository] Article was not found for {url}")
-        return None
 
     async def has_paragraphs(self, url) -> bool:
         async with self._lock:
@@ -206,15 +189,12 @@ class ArticleRepository:
                 return False
             return True
 
-    def get_latest_articles(self, count):
-        try:
-            self._lock.acquire()
+    async def get_latest_articles(self, count):
+        async with self._lock:
             cur = self._conn.cursor()
             row = cur.execute(f"SELECT id, url, title, processed_html FROM articles ORDER BY id DESC LIMIT {self.cursor_type}", (count,))
 
             return row.fetchall()
-        finally:
-            self._lock.release()
 
     async def set_paragraphs(self, url, paragraphs, summary, summary_ratings, topics, topic_ratings):
         async with self._lock:

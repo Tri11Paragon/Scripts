@@ -10,6 +10,7 @@ in pkgs.mkShell {
       trafilatura
       playwright
 	  flask
+	  quart
     ]))
   ];
   propagatedBuildInputs = with pkgs; [

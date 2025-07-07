@@ -1,4 +1,8 @@
+import json
+import re
+
 from quart import Quart, request, jsonify, abort, send_from_directory
+import quart
 from pathlib import Path
 import logging
 
@@ -16,16 +20,75 @@ LOGGER = logging.getLogger("server")
 async def index():
     return await send_from_directory("static", "index.html")
 
-@app.route("/health")
+@app.route("/index.html")
+async def index_html():
+    return await index()
+
+@app.route("/view.html")
+async def view_html():
+    return await send_from_directory("static", "view.html")
+
+@app.route("/view")
+async def view():
+    return await view_html()
+
+@app.route("/api/health")
 async def health():
     return {"status": "ok"}
 
-@app.route("/articles/<article_url>", methods=["GET"])
+@app.route("/api/article/<path:article_url>", methods=["GET"])
 async def get_article(article_url: str):
     article = await article_repository.get_article(article_url)
     if article is None:
         abort(404, description="Article not found")
     return jsonify(article)
+
+@app.route("/api/articles", methods=["GET"])
+async def get_articles():
+    count = min(int(request.args.get("count") or "25"), 125)
+    last = int(request.args.get("last") or "-1")
+    articles = await article_repository.get_latest_articles(count, last)
+
+    json_obj = []
+    for _, url, title, processed_html in articles:
+        json_obj.append({url: {
+            "title": title,
+            "processed_text": processed_html,
+        }})
+
+    return jsonify(json_obj)
+
+@app.route("/api/view_article", methods=["GET"])
+async def view_article():
+    url = request.args.get("url")
+    if not url:
+        abort(400, description="`url` query parameter is required")
+
+    article_data = await article_repository.get_paragraphs(url)
+    if article_data is None:
+        abort(404, description="Article not found")
+    article = {
+        "title": article_data.title,
+        "summary": article_data.summary,
+        "topics": article_data.topics,
+        "topics_map": article_data.topics_map,
+        "paragraphs": {}
+    }
+    for paragraph_id, paragraph_text in article_data.paragraphs:
+        article["paragraphs"][paragraph_id] = {
+            "text": paragraph_text,
+            "topic_ratings": [],
+            "summary_rating": article_data.summary_rating.get(paragraph_id)
+        }
+
+        for topic_id, topic, rating in article_data.paragraph_ratings[paragraph_id]:
+            article["paragraphs"][paragraph_id]["topic_ratings"].append({
+                "id": topic_id,
+                "topic": topic,
+                "rating": (True if (re.search("YES", rating)) else False)
+            })
+    return jsonify(article)
+
 
 @app.route("/article-by-url", methods=["GET"])
 async def get_article_by_url():

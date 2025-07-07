@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Article Summaries</title>
+
+    <!-- Tiny bit of styling so it already looks decent -->
+    <style>
+        body{
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0 1rem;
+            background:#f6f8fa;
+        }
+        h1{color:#333;text-align:center;margin-top:1.5rem;}
+        #articles{
+            display:flex;
+            flex-direction:column;
+            gap:1rem;
+            max-width:800px;
+            margin:2rem auto;
+        }
+        .article-card{
+            background:#fff;
+            border-radius:6px;
+            padding:1rem 1.5rem;
+            box-shadow:0 1px 3px rgba(0,0,0,.08);
+        }
+        .article-card h2{
+            margin:.2rem 0 .6rem;
+            font-size:1.2rem;
+        }
+        .article-card p{
+            color:#444;
+            margin:0;
+        }
+        .article-link .article-card{
+            transition: transform .15s ease, box-shadow .15s ease;
+        }
+        .article-link:hover .article-card,
+        .article-link:focus-visible .article-card{
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 6px 14px rgba(0,0,0,.16);
+        }
+
+        .article-link,
+        .article-link:visited,
+        .article-link:hover,
+        .article-link:active,
+        .article-link:focus {
+            text-decoration: none;
+            color: inherit;   /* keep the original text color */
+        }
+        .error{
+            color:#c00;
+            text-align:center;
+            margin-top:2rem;
+        }
+    </style>
+</head>
+
+<body>
+<div style="display: flex; justify-content: center;">
+    <h1>Newsulizer</h1>
+</div>
+<div style="display: flex; justify-content: center;">
+    <h2>Latest Article Summaries</h2>
+</div>
+
+<section id="articles" aria-live="polite"></section>
+<p id="error" class="error" hidden>Unable to load articles. Please try again later.</p>
+
+<script type="text/javascript">
+    (function loadArticles() {
+        const container = document.getElementById('articles');
+        const errorEl  = document.getElementById('error');
+
+        // Change this to the full path of your API if it differs
+        const ENDPOINT = '/api/articles?count=25';
+
+        fetch(ENDPOINT)
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                if (!Array.isArray(data) || data.length === 0) {
+                    throw new Error('No data returned');
+                }
+
+                data.forEach(item => {
+                        const [url, meta] = Object.entries(item)[0];
+
+                        /* Build <a><article>… inside …</article></a> so
+                           the whole card is a single coherent link          */
+                        const link = document.createElement('a');
+                        link.className = 'article-link';
+                        link.href = '/view?url=' + encodeURIComponent(url);
+
+                        const card = document.createElement('article');
+                        card.className = 'article-card';
+
+                        const h2 = document.createElement('h2');
+                        h2.textContent = meta.title || url;
+
+                        const p  = document.createElement('p');
+                        p.textContent = truncate(meta.processed_text, 280);
+
+                        card.appendChild(h2);
+                        card.appendChild(p);
+                        link.appendChild(card);
+                        container.appendChild(link);
+                });
+            })
+            .catch(err => {
+                console.error(err);
+                errorEl.hidden = false;
+            });
+
+        // Helper to shorten long text without breaking words mid-sentence
+        function truncate(str, maxLen) {
+            if (typeof str !== 'string') return '';
+            return str.length > maxLen ? str.slice(0, maxLen).trimEnd() + '…' : str;
+        }
+    })();
+</script>
+</body>
+</html>

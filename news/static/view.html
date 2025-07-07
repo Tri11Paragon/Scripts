@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Article View</title>
+
+    <style>
+        :root{
+            /* future per-paragraph background color */
+            --card-bg: #ffffff;
+        }
+
+                /* ─────────── Global title bar ─────────── */
+        .navbar{
+            position:fixed;
+            top:0; left:0; right:0;
+            height:3rem;
+            background:#0d47a1;
+            color:#fff;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            padding:0 1rem;
+            box-shadow:0 1px 4px rgba(0,0,0,.15);
+            z-index:100;
+        }
+        .navbar .brand{
+            font-size:1.15rem;
+            font-weight:700;
+            color:#fff;
+            text-decoration:none;
+        }
+        .navbar .nav-link{
+            color:#fff;
+            text-decoration:none;
+            margin-left:1rem;
+            font-size:.95rem;
+        }
+        .navbar .nav-link:hover{
+            text-decoration:underline;
+        }
+
+        body{
+            font-family: Arial, sans-serif;
+            margin:0;
+            padding: 4rem 1rem 2rem;
+            background:#f6f8fa;
+            color:#222;
+        }
+
+        h1{
+            text-align:center;
+            margin:1.5rem 0 1rem;
+            font-size:1.6rem;
+        }
+
+        a,
+        a:visited,
+        a:hover,
+        a:active,
+        a:focus {
+            /*text-decoration: none;*/
+            color: inherit;   /* keep the original text color */
+        }
+
+        /* TOPICS GRID ------------------------------------------------------- */
+        #topics{
+            display:grid;
+            grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+            gap:.75rem;
+            max-width:1200px;
+            margin:0 auto 2rem;
+            list-style:none;
+            padding:0;
+        }
+        .topic-chip{
+            background:#e8eef6;
+            border-radius:4px;
+            padding:.6rem .8rem;
+            font-size:.9rem;
+            line-height:1.3;
+        }
+
+        /* SUMMARY BLOB ------------------------------------------------------ */
+        #summary{
+            background:#fff8e6;
+            border-left:5px solid #f5c147;
+            border-radius:4px;
+            padding:1rem 1.2rem;
+            max-width:900px;
+            margin:0 auto 2rem;
+            font-size:1rem;
+        }
+
+        /* PARAGRAPH CARDS --------------------------------------------------- */
+        #paragraphs{
+            display:flex;
+            flex-direction:column;
+            gap:1rem;
+            max-width:900px;
+            margin:0 auto;
+        }
+        .paragraph-card{
+            background:var(--card-bg);
+            border-radius:6px;
+            padding:1rem 1.2rem;
+            box-shadow:0 1px 3px rgba(0,0,0,.08);
+            transition:box-shadow .15s ease;
+        }
+        .paragraph-card:hover{
+            box-shadow:0 3px 8px rgba(0,0,0,.14);
+        }
+
+        .error{
+            color:#c00;
+            text-align:center;
+            margin-top:2rem;
+        }
+    </style>
+</head>
+
+<body>
+<header class="navbar">
+        <a href="/" class="brand">Newsulizer</a>
+        <nav>
+            <a href="/" class="nav-link">Home</a>
+        </nav>
+</header>
+
+<div style="display: flex; justify-content: center;">
+    <h1 id="title"><b></b></h1>
+</div>
+
+
+<div style="display: flex; justify-content: center;">
+    <div style="display: block; padding-bottom: 1rem;">
+        <div style="display: flex; justify-content: center;">
+            <h2>Article Paragraphs</h2>
+        </div>
+        <p>Extracted from the original article</p>
+    </div>
+</div>
+
+<section id="paragraphs" aria-label="Article paragraphs"></section>
+
+<div style="display: flex; justify-content: center;">
+    <h2>Article Topics (AI Generated)</h2>
+</div>
+<ul id="topics" aria-label="Article topics"></ul>
+
+<div style="display: flex; justify-content: center;">
+    <h2>Article Summary (AI Generated)</h2>
+</div>
+<section id="summary" hidden></section>
+
+<p id="error" class="error" hidden>Unable to load article. Please try again later.</p>
+
+<script type="text/javascript">
+    (function main(){
+        const qs   = new URLSearchParams(window.location.search);
+        const url  = qs.get('url');
+        const API  = '/api/view_article?url=' + encodeURIComponent(url ?? '');
+
+        const elTopics     = document.getElementById('topics');
+        const elSummary    = document.getElementById('summary');
+        const elParagraphs = document.getElementById('paragraphs');
+        const elError      = document.getElementById('error');
+        const elTitle       = document.getElementById('title');
+
+        if(!url){
+            elError.hidden = false;
+            elError.textContent = '`url` query parameter missing.';
+            return;
+        }
+
+        fetch(API)
+            .then(r => {
+                if(!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
+            .then(renderArticle)
+            .catch(err => {
+                console.error(err);
+                elError.hidden = false;
+            });
+
+        /* ---------------------------------------------------------------- */
+        function renderArticle(data){
+            elTitle.innerHTML = "<a href='" + url + "'>\"" + data.title + "\"</a>";
+
+            /* 1. TOPICS -------------------------------------------------- */
+            if(Array.isArray(data.topics)){
+                data.topics.forEach(topic => {
+                    const li = document.createElement('li');
+                    li.className = 'topic-chip';
+                    li.textContent = topic;
+                    elTopics.appendChild(li);
+                });
+            }
+
+            /* 2. SUMMARY ------------------------------------------------- */
+            if(typeof data.summary === 'string' && data.summary.trim() !== ''){
+                elSummary.textContent = data.summary.trim();
+                elSummary.hidden = false;
+            }
+
+            /* 3. PARAGRAPHS --------------------------------------------- */
+            Object.entries(data.paragraphs ?? {}).forEach(([pid, pData]) => {
+                const card = document.createElement('div');
+                card.className = 'paragraph-card';
+
+                /* store ratings for future use */
+                card.dataset.summaryRating = pData.summary_rating ?? '';
+                card.dataset.topicRatings  = JSON.stringify(
+                    (pData.topic_ratings ?? []).map(r => !!r.rating)
+                );
+
+                const p = document.createElement('p');
+                p.textContent = pData.text;
+                card.appendChild(p);
+
+                elParagraphs.appendChild(card);
+            });
+        }
+    })();
+</script>
+</body>
+</html>

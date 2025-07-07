@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 import asyncio
 
@@ -11,7 +13,7 @@ from typing import Final, Optional, Union, Protocol, Any, Tuple
 import logging
 
 def process_html(html):
-    return trafilatura.extract(html, output_format='markdown', include_images=True, include_formatting=True,
+    return trafilatura.extract(html, output_format='txt', include_images=True, include_formatting=True,
                         include_tables=True, include_comments=False, favor_recall=True)
 
 LOGGER = logging.getLogger("pool")
@@ -86,6 +88,16 @@ class DBConnectionInfo:
         self.user = user
         self.password = password
 
+@dataclass(frozen=True)
+class ArticleParagraphs:
+    article_id: int
+    paragraphs: list[tuple[int, str]]
+    topics: list[str]
+    topics_map: dict[int, str]
+    paragraph_ratings: dict[int, list[tuple[int, str, bool]]]
+    summary: str
+    summary_rating: dict[int, float]
+    title: str = ""
 
 class ArticleRepository:
     """
@@ -192,12 +204,71 @@ class ArticleRepository:
                 return False
             return True
 
-    async def get_latest_articles(self, count):
+    async def get_latest_articles(self, count, last = -1) -> list[tuple[int, str, str, str]] | None:
         async with self._lock:
             cur = self._conn.cursor()
-            row = cur.execute(f"SELECT id, url, title, processed_html FROM articles ORDER BY id DESC LIMIT {self.cursor_type}", (count,))
+            if last > 0:
+                row = cur.execute(f"SELECT id, url, title, processed_html FROM articles WHERE id < {self.cursor_type} ORDER BY id DESC LIMIT {self.cursor_type}", (last, count))
+            else:
+                row = cur.execute(
+                    f"SELECT id, url, title, processed_html FROM articles ORDER BY id DESC LIMIT {self.cursor_type}",
+                    (count,))
 
             return row.fetchall()
+
+    async def get_paragraphs(self, article_url : str) -> ArticleParagraphs | None:
+        async with self._lock:
+            cur = self._conn.cursor()
+            row = cur.execute(f"SELECT id, title FROM articles WHERE url = {self.cursor_type}", (article_url,))
+            article_id, title = row.fetchone()
+
+            if article_id is None:
+                return None
+
+            row = cur.execute(f"SELECT id, paragraph_text FROM paragraphs WHERE article_id = {self.cursor_type}", (article_id,))
+
+            paragraphs: list[tuple[int, str]] = row.fetchall()
+
+            row = cur.execute(f"SELECT id, topic_text FROM topics WHERE article_id = {self.cursor_type}", (article_id,))
+
+            topics: list[tuple[int, str]] = row.fetchall()
+
+            topics_map = {}
+            for topic in topics:
+                topics_map[topic[0]] = topic[1]
+
+            row = cur.execute(f"SELECT paragraph_id, topic_id, rating FROM topic_ratings WHERE topic_id IN (SELECT id FROM topics WHERE article_id = {self.cursor_type})", (article_id, ))
+
+            topic_ratings: list[tuple[int, int, bool]] = row.fetchall()
+
+            topic_ratings_map = {}
+            for paragraph_id, topic_id, rating in topic_ratings:
+                if not paragraph_id in topic_ratings_map:
+                    topic_ratings_map[paragraph_id] = []
+                topic_ratings_map[paragraph_id].append((topic_id, topics_map[topic_id], rating))
+
+            row = cur.execute(f"SELECT summary_text FROM summaries WHERE article_id = {self.cursor_type}", (article_id,))
+
+            summary = row.fetchone()[0]
+
+            row = cur.execute(f"SELECT paragraph_id, rating FROM summary_ratings WHERE article_id = {self.cursor_type}", (article_id,))
+
+            summary_ratings = row.fetchall()
+
+            summary_ratings_map = {}
+            for paragraph_id, rating in summary_ratings:
+                summary_ratings_map[paragraph_id] = rating
+
+            return ArticleParagraphs(
+                article_id=article_id,
+                paragraphs=paragraphs,
+                topics=[topic[1] for topic in topics],
+                topics_map=topics_map,
+                paragraph_ratings=topic_ratings_map,
+                summary=summary,
+                summary_rating=summary_ratings_map,
+                title=title
+            )
 
     async def set_paragraphs(self, url, paragraphs, summary, summary_ratings, topics, topic_ratings):
         async with self._lock:

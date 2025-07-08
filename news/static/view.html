@@ -116,6 +116,11 @@
         .paragraph-card:hover{
             box-shadow:0 3px 8px rgba(0,0,0,.14);
         }
+        .paragraph-card--active{
+            outline:3px solid #1565c0;      /* blue focus ring   */
+            outline-offset:2px;
+            box-shadow:0 0 6px rgba(21,101,192,.35); /* soft glow */
+        }
 
         /* ─────────── Relevance badge ─────────── */
         .relevance-badge{
@@ -138,6 +143,36 @@
             text-align:center;
             margin-top:2rem;
         }
+        /* ─────────── Floating navigation arrows ─────────── */
+        .nav-arrow{
+            position:fixed;
+            top:50%;
+            transform:translateY(-50%);
+            width:42px;
+            height:42px;
+            border:none;
+            border-radius:50%;
+            background:#0d47a1;
+            color:#fff;
+            font-size:1.35rem;
+            line-height:1;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            cursor:pointer;
+            box-shadow:0 2px 6px rgba(0,0,0,.25);
+            z-index:110;
+            transition:background .2s ease;
+        }
+        .nav-arrow:hover{
+            background:#1565c0;
+        }
+        .nav-arrow:disabled{
+            opacity:.35;
+            cursor:default;
+        }
+        .nav-arrow--left {left:.75rem;}
+        .nav-arrow--right{right:.75rem;}
     </style>
 </head>
 
@@ -261,16 +296,106 @@
                 badge.textContent = pct + '% relevant';
                 card.appendChild(badge);
 
-                /* store ratings for possible later use */
-                card.dataset.summaryRating = pData.summary_rating ?? '';
-                card.dataset.topicRatings  = JSON.stringify(
-                    (pData.topic_ratings ?? []).map(r => !!r.rating)
-                );
+                card.dataset.summaryRating = rating;   /* keep numeric value for sorting */
 
                 elParagraphs.appendChild(card);
             });
+
+            setupRelevanceNavigation();
         }
+
+        /* ───────────────── Floating-arrow navigation ───────────────── */
+        let sortedCards = [];           // cards sorted by relevance
+        let currentIdx  = -1;            // index of the active card
+        let previousIdx = -1;
+        let arrowPrev, arrowNext;       // will be assigned in setup
+
+        function setupRelevanceNavigation(){
+            const cards = Array.from(document.querySelectorAll('.paragraph-card'));
+            if(!cards.length) return;
+
+            sortedCards = cards.sort(
+                (a,b) => parseFloat(b.dataset.summaryRating) - parseFloat(a.dataset.summaryRating)
+            );
+
+            /* grab the arrow buttons so helpers can reach them */
+            arrowPrev = document.getElementById('arrowPrev');
+            arrowNext = document.getElementById('arrowNext');
+
+            arrowPrev.addEventListener('click', () => goTo(currentIdx - 1));
+            arrowNext.addEventListener('click', () => goTo(currentIdx + 1));
+
+            /* start on the most-relevant paragraph */
+            // goTo(0, /*smooth*/false);
+            updateArrowState();
+        }
+
+        function goTo(idx, smooth = true, fromScroll = false){
+            if (idx < 0)
+                idx = sortedCards.length - 1;
+            else if (idx >= sortedCards.length)
+                idx = 0;
+            // if(idx < 0 || idx >= sortedCards.length) return;
+
+            currentIdx = idx;
+
+            /* only scroll the viewport when the user clicked an arrow */
+            if(!fromScroll){
+                sortedCards[currentIdx].scrollIntoView({
+                    behavior: smooth ? 'smooth' : 'auto',
+                    block: 'center'
+                });
+            }
+
+            updateArrowState();
+            highlightActive();
+        }
+
+        function updateArrowState(){
+            if (currentIdx < 0) {
+                arrowPrev.disabled = false;
+                arrowNext.disabled = false;
+                return;
+            }
+            arrowPrev.disabled = currentIdx === 0;
+            arrowNext.disabled = currentIdx === sortedCards.length - 1;
+        }
+
+        function highlightActive(){
+            if (currentIdx < 0) return;
+            if(previousIdx !== -1){
+                sortedCards[previousIdx].classList.remove('paragraph-card--active');
+            }
+            sortedCards[currentIdx].classList.add('paragraph-card--active');
+            previousIdx = currentIdx;
+        }
+
+        document.addEventListener('keydown', evt => {
+            /* ignore key presses while the user is typing in inputs / textareas */
+            const tag = (evt.target.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || evt.target.isContentEditable) {
+                return;
+            }
+
+            if (evt.key === 'ArrowLeft') {
+                /* same as clicking the left arrow */
+                if (typeof arrowPrev !== 'undefined' && !arrowPrev.disabled) {
+                    evt.preventDefault();
+                    arrowPrev.click();
+                }
+            }
+            else if (evt.key === 'ArrowRight') {
+                /* same as clicking the right arrow */
+                if (typeof arrowNext !== 'undefined' && !arrowNext.disabled) {
+                    evt.preventDefault();
+                    arrowNext.click();
+                }
+            }
+        });
+
     })();
 </script>
+<button id="arrowPrev" class="nav-arrow nav-arrow--left"  aria-label="Previous paragraph" disabled>&larr;</button>
+<button id="arrowNext" class="nav-arrow nav-arrow--right" aria-label="Next paragraph" disabled>&rarr;</button>
 </body>
 </html>

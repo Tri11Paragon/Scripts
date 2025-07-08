@@ -337,6 +337,10 @@ async def on_message(message: discord.Message) -> None:
     if not (is_dm or is_mention):
         return
 
+    if is_dm and message.author.id != 199680010267656192:
+        await message.channel.send("Only authorized users are allowed to use this bot.")
+        return
+
     url = extract_first_url(message.content)
     if not url:
         await message.channel.send("Please send me a link to a news article.")

@@ -100,7 +100,13 @@
             max-width:900px;
             margin:0 auto;
         }
+        /*  make each paragraph a little flex-box so we can place
+            the coloured badge on the right-hand side              */
         .paragraph-card{
+            display:flex;
+            justify-content:space-between;
+            align-items:flex-start;
+            gap:.75rem;
             background:var(--card-bg);
             border-radius:6px;
             padding:1rem 1.2rem;
@@ -111,6 +117,22 @@
             box-shadow:0 3px 8px rgba(0,0,0,.14);
         }
 
+        /* ─────────── Relevance badge ─────────── */
+        .relevance-badge{
+            min-width:72px;
+            font-size:.75rem;
+            font-weight:600;
+            line-height:1.4;
+            color:#fff;
+            padding:.25rem .4rem;
+            border-radius:4px;
+            text-align:center;
+            user-select:none;
+            flex-shrink:0;
+        }
+        .relevance-low   {background:#d32f2f;}  /* red   */
+        .relevance-med   {background:#f57c00;}  /* amber */
+        .relevance-high  {background:#388e3c;}  /* green */
         .error{
             color:#c00;
             text-align:center;
@@ -209,15 +231,41 @@
                 const card = document.createElement('div');
                 card.className = 'paragraph-card';
 
-                /* store ratings for future use */
+                /* main paragraph text */
+                const p = document.createElement('p');
+                p.textContent = pData.text;
+                p.style.margin = 0;
+                card.appendChild(p);
+
+                /* relevance badge --------------------------------------- */
+                const badge = document.createElement('span');
+                badge.classList.add('relevance-badge');
+
+                /* fall-back to 0 if the API did not supply a number */
+                const summary_rating = Number.parseFloat(pData.summary_rating ?? 0) / 100;
+                const ratingsArr = pData.topic_ratings ?? [];
+                const totalTrue = ratingsArr.reduce(
+                  (sum, r) => sum + (r.rating ? 1 : 0),
+                  0
+                );
+                const topic_ratings = totalTrue / ratingsArr.length;
+                const rating = (summary_rating + topic_ratings) / 2;
+
+                let cssClass  = 'relevance-low';
+                if (rating >= 0.66)       cssClass = 'relevance-high';
+                else if (rating >= 0.33)  cssClass = 'relevance-med';
+                badge.classList.add(cssClass);
+
+                /* display as percentage for clarity */
+                const pct = Math.round(rating * 100);
+                badge.textContent = pct + '% relevant';
+                card.appendChild(badge);
+
+                /* store ratings for possible later use */
                 card.dataset.summaryRating = pData.summary_rating ?? '';
                 card.dataset.topicRatings  = JSON.stringify(
                     (pData.topic_ratings ?? []).map(r => !!r.rating)
                 );
-
-                const p = document.createElement('p');
-                p.textContent = pData.text;
-                card.appendChild(p);
 
                 elParagraphs.appendChild(card);
             });

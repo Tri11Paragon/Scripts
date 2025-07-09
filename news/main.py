@@ -328,11 +328,10 @@ async def on_message(message: discord.Message) -> None:
     if message.author == bot.user:
         return
 
-    if message.author.id != 199680010267656192:
-        await message.channel.send("Only authorized users are allowed to use this bot.")
-        return
-
     if message.content.startswith("!"):
+        if message.author.id != 199680010267656192:
+            await message.channel.send("Only authorized users are allowed to use this bot.")
+            return
         if message.content == "!process":
             asyncio.create_task(process_articles(message))
         return
@@ -354,6 +353,10 @@ async def on_message(message: discord.Message) -> None:
     is_mention = (bot.user in message.mentions if message.guild else False) or overwrite
 
     if not (is_dm or is_mention):
+        return
+
+    if message.author.id != 199680010267656192:
+        await message.channel.send("Only authorized users are allowed to use this bot.")
         return
 
     url = extract_first_url(message.content)

@@ -20,6 +20,10 @@ LOGGER = logging.getLogger("server")
 async def index():
     return await send_from_directory("static", "index.html")
 
+@app.route("/news/")
+async def index_root():
+    return await index()
+
 @app.route("/news/index.html")
 async def index_html():
     return await index()

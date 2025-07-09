@@ -1,0 +1,122 @@
+@@
+         .relevance-high  {background:#388e3c;}  /* green */
+ 
++        /* ─────────── Floating navigation arrows ─────────── */
++        .nav-arrow{
++            position:fixed;
++            top:50%;
++            transform:translateY(-50%);
++            width:42px;
++            height:42px;
++            border:none;
++            border-radius:50%;
++            background:#0d47a1;
++            color:#fff;
++            font-size:1.35rem;
++            line-height:1;
++            display:flex;
++            align-items:center;
++            justify-content:center;
++            cursor:pointer;
++            box-shadow:0 2px 6px rgba(0,0,0,.25);
++            z-index:110;
++            transition:background .2s ease;
++        }
++        .nav-arrow:hover{
++            background:#1565c0;
++        }
++        .nav-arrow:disabled{
++            opacity:.35;
++            cursor:default;
++        }
++        .nav-arrow--left {left:.75rem;}
++        .nav-arrow--right{right:.75rem;}
++
+@@
+ <section id="summary" hidden></section>
+ 
+ <p id="error" class="error" hidden>Unable to load article. Please try again later.</p>
++
++<!-- floating arrows -->
++<button id="arrowPrev" class="nav-arrow nav-arrow--left"  aria-label="Previous paragraph" disabled>&larr;</button>
++<button id="arrowNext" class="nav-arrow nav-arrow--right" aria-label="Next paragraph" disabled>&rarr;</button>
+ 
+ <script type="text/javascript">
+     (function main(){
+@@
+                 /* relevance badge --------------------------------------- */
+                 const badge = document.createElement('span');
+                 badge.classList.add('relevance-badge');
+@@
+                 badge.textContent = pct + '% relevant';
+                 card.appendChild(badge);
+ 
++                /* store rating for later sorting */
++                card.dataset.summaryRating = rating;
+                 card.dataset.topicRatings  = JSON.stringify(
+                     (pData.topic_ratings ?? []).map(r => !!r.rating)
+                 );
+ 
+@@
+             });
++
++            /* initialise arrow navigation once all cards exist ---------- */
++            setupRelevanceNavigation();
+         }
++
++        /* ──────────────────────────────────────────────────────────── */
++        /* Floating-arrow navigation                                   */
++        /* ──────────────────────────────────────────────────────────── */
++
++        let sortedCards = [];   // array of <div.paragraph-card> sorted by relevance
++        let currentIdx  = 0;    // index inside sortedCards that is considered “current”
++
++        function setupRelevanceNavigation(){
++            const cards = Array.from(document.querySelectorAll('.paragraph-card'));
++            if(!cards.length) return;
++
++            /* sort high-to-low by summary_rating supplied by the API */
++            sortedCards = cards.sort((a,b)=>
++                parseFloat(b.dataset.summaryRating) - parseFloat(a.dataset.summaryRating)
++            );
++
++            const arrowPrev = document.getElementById('arrowPrev');
++            const arrowNext = document.getElementById('arrowNext');
++
++            arrowPrev.addEventListener('click', () => goTo(currentIdx - 1));
++            arrowNext.addEventListener('click', () => goTo(currentIdx + 1));
++
++            /* update currentIdx automatically when the user scrolls */
++            const io = new IntersectionObserver(entries => {
++                entries.forEach(e => {
++                    if(e.isIntersecting){
++                        const idx = sortedCards.indexOf(e.target);
++                        if(idx !== -1){
++                            currentIdx = idx;
++                            updateArrowState();
++                        }
++                    }
++                });
++            }, {threshold:0.6});
++            sortedCards.forEach(card => io.observe(card));
++
++            /* jump to the most relevant paragraph on page load */
++            goTo(0, /*smooth=*/false);
++
++            /* helper functions ------------------------------------ */
++            function goTo(idx, smooth=true){
++                if(idx < 0 || idx >= sortedCards.length) return;
++                currentIdx = idx;
++                sortedCards[currentIdx]
++                    .scrollIntoView({behavior: smooth ? 'smooth' : 'auto', block:'center'});
++                updateArrowState();
++            }
++            function updateArrowState(){
++                arrowPrev.disabled = currentIdx === 0;
++                arrowNext.disabled = currentIdx === sortedCards.length - 1;
++            }
++        }
+     })();
+ </script>
+ </body>
+ </html>

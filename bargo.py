@@ -7,6 +7,7 @@ import json
 import argparse
 import os
 import subprocess
+import shutil
 import create_git_repo as repo
 import util.color_io as io
 
@@ -22,6 +23,10 @@ out/
 ./cmake-build*/
 ./build/
 ./out/
+*.sqlite3
+*.sqlite
+*.env
+.env
 """
 
 cmake_macros = """macro(sanitizers target_name)
@@ -159,7 +164,7 @@ parser.add_argument("--lib", action="store_true", help="Create a lib instead of 
 parser.add_argument("--graphics", "-g", default=False, action="store_true", help="Init with graphics in mind, ie use BLT With Graphics")
 
 parser.add_argument("action", help="Type of action to take, currently only 'init' is supported.")
-parser.add_argument("name", help="Project Name")
+parser.add_argument("name", help="Project Name. This utility creates a directory called this.")
 
 args = parser.parse_args()
 
@@ -247,6 +252,8 @@ if use_git:
 
 if use_blt:
     setup_blt(use_git=use_git, blt_url=blt_url, blt_path=blt_path)
+    if args.graphics:
+        shutil.copyfile("lib/" + blt_path + "/default.nix", "./default.nix")
     sub_dirs += "add_subdirectory(lib/" + blt_path + ")"
     links += "target_link_libraries(${PROJECT_NAME} PRIVATE " + blt_lib + ")"
 

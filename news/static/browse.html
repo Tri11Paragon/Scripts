@@ -85,7 +85,7 @@
 <body>
 
 <header class="navbar">
-        <a href="/" class="brand">Newsulizer</a>
+        <a href="/news/" class="brand">Newsulizer</a>
         <nav>
             <a href="/news/" class="nav-link">Home</a>
             <a href="/news/browse" class="nav-link">Browse</a>
@@ -173,7 +173,6 @@
             article.className = 'article';
             article.innerHTML = `
           <h2>${escapeHtml(meta.title)}</h2>
-          <a href="${url}" class="article-link"><h5 style="margin-top: 10px; margin-bottom: 10px;">Article Link</h5></a>
           <p>${escapeHtml(reg ?? '')}</p>
         `;
             link.appendChild(article);

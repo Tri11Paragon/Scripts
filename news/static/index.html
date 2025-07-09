@@ -6,10 +6,40 @@
 
     <!-- Tiny bit of styling so it already looks decent -->
     <style>
+                        /* ─────────── Global title bar ─────────── */
+        .navbar{
+            position:fixed;
+            top:0; left:0; right:0;
+            height:3rem;
+            background:#0d47a1;
+            color:#fff;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            padding:0 1rem;
+            box-shadow:0 1px 4px rgba(0,0,0,.15);
+            z-index:100;
+        }
+        .navbar .brand{
+            font-size:1.15rem;
+            font-weight:700;
+            color:#fff;
+            text-decoration:none;
+        }
+        .navbar .nav-link{
+            color:#fff;
+            text-decoration:none;
+            margin-left:1rem;
+            font-size:.95rem;
+        }
+        .navbar .nav-link:hover{
+            text-decoration:underline;
+        }
+
         body{
             font-family: Arial, sans-serif;
             margin: 0;
-            padding: 0 1rem;
+            padding: 4rem 1rem 2rem;
             background:#f6f8fa;
         }
         h1{color:#333;text-align:center;margin-top:1.5rem;}
@@ -59,6 +89,15 @@
     </style>
 </head>
 
+<header class="navbar">
+        <a href="/" class="brand">Newsulizer</a>
+        <nav>
+            <a href="/" class="nav-link">Home</a>
+            <a href="/browse" class="nav-link">Browse</a>
+            <a href="/search" class="nav-link">Search</a>
+        </nav>
+</header>
+
 <body>
 <div style="display: flex; justify-content: center;">
     <h1>Newsulizer</h1>
@@ -104,7 +143,17 @@
                         h2.textContent = meta.title || url;
 
                         const p  = document.createElement('p');
-                        p.textContent = truncate(meta.processed_text, 280);
+                        const txt = meta.processed_text;
+                        let reg = txt.replace(/(\(.*[^\w:_; '.,’"\s]+.*\))/g, '')
+                        reg = reg.replace(/(\[.*])/g, '')
+                        reg = reg.replace(/([^\w:_; '.,’"\s/]+)/g, '')
+                        const words = reg.split(/\s/g)
+                        reg = words.slice(0, Math.min(60, words.length)).join(' ').trim();
+                        if (reg.endsWith('.'))
+                            reg += "..";
+                        else
+                            reg += "...";
+                        p.textContent = reg;
 
                         card.appendChild(h2);
                         card.appendChild(p);

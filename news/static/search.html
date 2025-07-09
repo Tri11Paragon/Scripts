@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Search</title>
+
+    <!-- Simple styling; remove or move to an external sheet as you prefer -->
+    <style>
+        /* ─────────── Global title bar ─────────── */
+        .navbar{
+            position:fixed;
+            top:0; left:0; right:0;
+            height:3rem;
+            background:#0d47a1;
+            color:#fff;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            padding:0 1rem;
+            box-shadow:0 1px 4px rgba(0,0,0,.15);
+            z-index:100;
+        }
+        .navbar .brand{
+            font-size:1.15rem;
+            font-weight:700;
+            color:#fff;
+            text-decoration:none;
+        }
+        .navbar .nav-link{
+            color:#fff;
+            text-decoration:none;
+            margin-left:1rem;
+            font-size:.95rem;
+        }
+        .navbar .nav-link:hover{
+            text-decoration:underline;
+        }
+
+        :root {
+            --accent: #2563eb;
+            --border-radius: 0.5rem;
+        }
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: system-ui, sans-serif;
+            padding: 4rem 1rem 2rem;
+        }
+
+        /* ────────── Search bar ────────── */
+        .search-wrapper{
+            display:flex;
+            justify-content:center;
+            margin-bottom:1.5rem;
+        }
+        .search-container {
+            display: flex;
+            align-items: center;
+            width: min(32rem, 90vw);
+            border: 2px solid #e5e7eb;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            background: #fff;
+            transition: border-color 0.2s;
+        }
+        .search-container:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+        }
+        .search-container input {
+            flex: 1;
+            border: none;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            outline: none;
+        }
+        .search-container button {
+            background: none;
+            border: none;
+            padding: 0 0.75rem;
+            cursor: pointer;
+            color: var(--accent);
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .search-container svg {
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+
+        /* ────────── Article cards (copied from browse) ────────── */
+        .article{
+            background:#fff;
+            margin:0.5rem auto;
+            max-width:700px;
+            padding:1rem 1.25rem;
+            border-radius:4px;
+            box-shadow:0 1px 4px rgba(0,0,0,.08);
+        }
+        .article h2{
+            margin:0 0 .5rem;
+            font-size:1.2rem;
+            color:#333;
+        }
+        .article .meta{
+            font-size:.85rem;
+            color:#666;
+            margin-bottom:.75rem;
+        }
+        .article p{
+            margin:0;
+            line-height:1.5;
+        }
+        .article-link,
+        .article-link:visited,
+        .article-link:hover,
+        .article-link:active,
+        .article-link:focus {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        #loader{
+            text-align:center;
+            padding:2rem 0;
+            color:#777;
+        }
+        #endMarker{
+            text-align:center;
+            color:#555;
+            padding:1.5rem 0;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ===== NAVBAR ===== -->
+<header class="navbar">
+    <a href="/" class="brand">Newsulizer</a>
+    <nav>
+        <a href="/" class="nav-link">Home</a>
+        <a href="/browse" class="nav-link">Browse</a>
+        <a href="/search" class="nav-link">Search</a>
+    </nav>
+</header>
+
+<!-- ────────── Search bar ────────── -->
+<div class="search-wrapper">
+    <div class="search-container">
+        <input
+                type="search"
+                id="searchInput"
+                placeholder="Search..."
+                autocomplete="off"
+                aria-label="Search"
+        />
+        <button id="searchButton" aria-label="Submit search">
+            <!-- Simple magnifying-glass icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2">
+                <circle cx="11" cy="11" r="7" />
+                <line x1="16.65" y1="16.65" x2="21" y2="21" />
+            </svg>
+        </button>
+    </div>
+</div>
+
+<!-- ────────── Results feed ────────── -->
+<main id="feed"></main>
+<div id="loader" hidden>Loading…</div>
+<div id="endMarker" hidden>End of results</div>
+
+<!-- ────────── Logic ────────── -->
+<script type="module">
+    const searchInput = document.getElementById('searchInput');
+    const searchBtn   = document.getElementById('searchButton');
+    const feed        = document.getElementById('feed');
+    const loader      = document.getElementById('loader');
+    const endMarker   = document.getElementById('endMarker');
+
+    const PAGE_SIZE   = 5;
+
+    let currentQuery  = '';
+    let isFetching    = false;
+    let reachedEnd    = false;
+    let lastId;               // undefined until first batch returns
+
+    /* ---------- helpers ---------- */
+    function toggleLoader(show){ loader.hidden = !show; }
+    function resetFeed(){
+        feed.innerHTML = '';
+        lastId     = undefined;
+        reachedEnd = false;
+        endMarker.hidden = true;
+    }
+    function renderArticle(a){
+        const [url, meta] = Object.entries(a)[0];
+            const link = document.createElement('a');
+            link.className = 'article-link';
+            link.href = '/view?url=' + encodeURIComponent(url);
+
+            const article = document.createElement('article');
+            const txt = meta.processed_text;
+            let reg = txt.replace(/(\(.*[^\w:_; '.,’"\s]+.*\))/g, '')
+            reg = reg.replace(/(\[.*])/g, '')
+            reg = reg.replace(/([^\w:_; '.,’"\s/]+)/g, '')
+            const words = reg.split(/\s/g)
+            reg = words.slice(0, Math.min(60, words.length)).join(' ').trim();
+            if (reg.endsWith('.'))
+                reg += "..";
+            else
+                reg += "...";
+            article.className = 'article';
+            article.innerHTML = `
+          <h2>${escapeHtml(meta.title)}</h2>
+          <a href="${url}" class="article-link"><h5 style="margin-top: 10px; margin-bottom: 10px;">Article Link</h5></a>
+          <p>${escapeHtml(reg ?? '')}</p>
+        `;
+        link.appendChild(article);
+        feed.appendChild(link);
+    }
+
+    /* ---------- fetch & scroll ---------- */
+    async function loadMore(){
+        if (reachedEnd || isFetching || !currentQuery.trim()) return;
+
+        isFetching = true;
+        toggleLoader(true);
+
+        try{
+            const url = new URL('/api/search', window.location.origin);
+            url.searchParams.set('text',  currentQuery);
+            url.searchParams.set('count', PAGE_SIZE);
+            if (lastId !== undefined) url.searchParams.set('last', lastId);
+
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`Server responded ${resp.status}`);
+            const data = await resp.json();     // expecting an array
+            if (!Array.isArray(data)) throw new Error('Invalid payload');
+
+            if (data.length === 0){
+                reachedEnd = true;
+                endMarker.hidden = false;
+            } else {
+                data.forEach(renderArticle);
+                lastId = Object.entries(data[data.length - 1])[0][1].id;
+                console.log(data);
+                if (data.length < PAGE_SIZE){
+                    reachedEnd = true;
+                    endMarker.hidden = false;
+                }
+            }
+        }catch(err){
+            console.error(err);
+        }finally{
+            isFetching = false;
+            toggleLoader(false);
+        }
+    }
+
+    window.addEventListener('scroll', () => {
+        const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 600;
+        if (nearBottom) loadMore();
+    });
+
+    /* ---------- search triggers ---------- */
+    function performSearch(){
+        const query = searchInput.value.trim();
+        if (!query) return;
+        currentQuery = query;
+        resetFeed();
+        loadMore();
+    }
+    const txt = document.createElement('textarea');
+    function escapeHtml(str){
+        txt.textContent = str;
+        return txt.innerHTML;
+    }
+
+    searchBtn.addEventListener('click', performSearch);
+    searchInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') performSearch();
+    });
+
+    let debounceTimer;
+    searchInput.addEventListener("input", () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            performSearch();
+        }, 400); // ~0.4 s debounce; adjust as needed
+    });
+
+    /* optional: focus input on page load */
+    window.addEventListener('DOMContentLoaded', () => searchInput.focus());
+</script>
+</body>
+</html>

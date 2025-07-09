@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Browse Articles</title>
+    <style>
+                        /* ─────────── Global title bar ─────────── */
+        .navbar{
+            position:fixed;
+            top:0; left:0; right:0;
+            height:3rem;
+            background:#0d47a1;
+            color:#fff;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            padding:0 1rem;
+            box-shadow:0 1px 4px rgba(0,0,0,.15);
+            z-index:100;
+        }
+        .navbar .brand{
+            font-size:1.15rem;
+            font-weight:700;
+            color:#fff;
+            text-decoration:none;
+        }
+        .navbar .nav-link{
+            color:#fff;
+            text-decoration:none;
+            margin-left:1rem;
+            font-size:.95rem;
+        }
+        .navbar .nav-link:hover{
+            text-decoration:underline;
+        }
+
+        body{
+            font-family: sans-serif;
+            margin:0;
+            padding: 4rem 1rem 2rem;
+            background:#f7f7f7;
+        }
+        .article{
+            background:#fff;
+            margin:0.5rem auto;
+            max-width:700px;
+            padding:1rem 1.25rem;
+            border-radius:4px;
+            box-shadow:0 1px 4px rgba(0,0,0,.08);
+        }
+        .article h2{
+            margin:0 0 .5rem;
+            font-size:1.2rem;
+            color:#333;
+        }
+        .article .meta{
+            font-size:.85rem;
+            color:#666;
+            margin-bottom:.75rem;
+        }
+        .article p{
+            margin:0;
+            line-height:1.5;
+        }
+        #loader{
+            text-align:center;
+            padding:2rem 0;
+            color:#777;
+        }
+        .article-link,
+        .article-link:visited,
+        .article-link:hover,
+        .article-link:active,
+        .article-link:focus {
+            text-decoration: none;
+            color: inherit;   /* keep the original text color */
+        }
+        #endMarker{
+            text-align:center;
+            color:#555;
+            padding:1.5rem 0;
+        }
+    </style>
+</head>
+<body>
+
+<header class="navbar">
+        <a href="/" class="brand">Newsulizer</a>
+        <nav>
+            <a href="/" class="nav-link">Home</a>
+            <a href="/browse" class="nav-link">Browse</a>
+            <a href="/search" class="nav-link">Search</a>
+        </nav>
+</header>
+<div style="display: flex; justify-content: center;">
+    <h1>Browse Articles</h1>
+</div>
+
+<main id="feed"></main>
+<div id="loader" hidden>Loading…</div>
+<div id="endMarker" hidden>End of results</div>
+
+<script type="module">
+    const feed       = document.getElementById('feed');
+    const loader     = document.getElementById('loader');
+    const endMarker   = document.getElementById('endMarker');
+    let   isFetching = false;
+    let   reachedEnd = false;
+    let   lastId; // undefined until the first batch returns
+
+    /* --------  kick-off  -------- */
+    window.addEventListener('DOMContentLoaded', loadMore);
+
+    /* --------  infinite scroll  -------- */
+    window.addEventListener('scroll', () => {
+        if (reachedEnd || isFetching) return;
+        const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 600;
+        if (nearBottom) loadMore();
+    });
+
+    async function loadMore(){
+        if (reachedEnd) return;
+        isFetching = true;
+        toggleLoader(true);
+
+        try{
+            const url = new URL('/api/articles', window.location.origin);
+            if (lastId !== undefined) url.searchParams.set('last', lastId);
+            url.searchParams.set("count", "5")
+
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('Failed to load articles');
+
+            const articles = await res.json();     // expecting an array
+            if (articles.length === 0){
+                reachedEnd = true;
+                endMarker.hidden = false;
+                toggleLoader(false);
+                return;
+            }
+
+            render(articles);
+            lastId = Object.entries(articles[articles.length - 1])[0][1].id; // save the lowest id for next call
+            console.log(lastId);
+        }catch(err){
+            console.error(err);
+        }finally{
+            isFetching = false;
+            toggleLoader(false);
+        }
+    }
+
+    function render(items){
+        const frag = document.createDocumentFragment();
+
+        items.forEach(a => {
+            const [url, meta] = Object.entries(a)[0];
+            const link = document.createElement('a');
+            link.className = 'article-link';
+            link.href = '/view?url=' + encodeURIComponent(url);
+
+            const article = document.createElement('article');
+            const txt = meta.processed_text;
+            let reg = txt.replace(/(\(.*[^\w:_; '.,’"\s]+.*\))/g, '')
+            reg = reg.replace(/(\[.*])/g, '')
+            reg = reg.replace(/([^\w:_; '.,’"\s/]+)/g, '')
+            const words = reg.split(/\s/g)
+            reg = words.slice(0, Math.min(60, words.length)).join(' ').trim();
+            if (reg.endsWith('.'))
+                reg += "..";
+            else
+                reg += "...";
+            article.className = 'article';
+            article.innerHTML = `
+          <h2>${escapeHtml(meta.title)}</h2>
+          <a href="${url}" class="article-link"><h5 style="margin-top: 10px; margin-bottom: 10px;">Article Link</h5></a>
+          <p>${escapeHtml(reg ?? '')}</p>
+        `;
+            link.appendChild(article);
+            frag.appendChild(link);
+        });
+
+        feed.appendChild(frag);
+    }
+
+    function toggleLoader(show){
+        loader.hidden = !show;
+    }
+
+    /* basic XSS-safe string escape */
+    const txt = document.createElement('textarea');
+    function escapeHtml(str){
+        txt.textContent = str;
+        return txt.innerHTML;
+    }
+</script>
+</body>
+</html>

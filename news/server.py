@@ -32,6 +32,22 @@ async def view_html():
 async def view():
     return await view_html()
 
+@app.route("/browse.html")
+async def browse_html():
+    return await send_from_directory("static", "browse.html")
+
+@app.route("/browse")
+async def browse():
+    return await browse_html()
+
+@app.route("/search.html")
+async def search_html():
+    return await send_from_directory("static", "search.html")
+
+@app.route("/search")
+async def search():
+    return await search_html()
+
 @app.route("/api/health")
 async def health():
     return {"status": "ok"}
@@ -50,10 +66,32 @@ async def get_articles():
     articles = await article_repository.get_latest_articles(count, last)
 
     json_obj = []
-    for _, url, title, processed_html in articles:
+    for _id, url, title, processed_html in articles:
         json_obj.append({url: {
             "title": title,
             "processed_text": processed_html,
+            "id": _id
+        }})
+
+    return jsonify(json_obj)
+
+@app.route("/api/search", methods=["GET"])
+async def search_articles():
+    text = request.args.get("text")
+    count = min(int(request.args.get("count") or "25"), 125)
+    last = int(request.args.get("last") or "-1")
+    if not text:
+        abort(400, description="`text` query parameter is required")
+    articles = await article_repository.search_articles(text, count, last)
+
+    LOGGER.info(f"Found {len(articles)} articles for search query: {text}")
+
+    json_obj = []
+    for _id, url, title, processed_html in articles:
+        json_obj.append({url: {
+            "title": title,
+            "processed_text": processed_html,
+            "id": _id
         }})
 
     return jsonify(json_obj)

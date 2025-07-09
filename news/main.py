@@ -312,10 +312,25 @@ async def on_ready() -> None:
     LOGGER.info("Playwright pool ready")
     LOGGER.info("------")
 
+async def process_articles(message: discord.Message):
+    await message.channel.send("Processing incomplete articles...")
+    LOGGER.info("Fetching incomplete articles")
+    urls = await server.article_repository.fetch_incomplete()
+    for url in urls:
+        LOGGER.info(f"Processing incomplete article {url}")
+        await message.channel.send(f"Processing incomplete article {url}")
+        await handle_article_url(message, url)
+    await message.channel.send("Done!")
+
 @bot.event
 async def on_message(message: discord.Message) -> None:
     # Ignore our own messages
     if message.author == bot.user:
+        return
+
+    if message.content.startswith("!"):
+        if message.content == "!process":
+            asyncio.create_task(process_articles(message))
         return
 
     is_dm = message.guild is None

@@ -149,6 +149,17 @@ class ArticleRepository:
     # public API
     # ------------------------------------------------------------------ #
 
+    async def fetch_incomplete(self) -> list[str]:
+        async with self._lock:
+            cur = self._conn.cursor()
+            row = cur.execute(f"""
+                SELECT url FROM articles AS a WHERE ((SELECT COUNT(*) FROM summaries WHERE article_id = a.id) = 0 OR (SELECT COUNT(*) FROM paragraphs WHERE article_id = a.id) = 0)
+            """)
+
+            results = row.fetchall()
+
+            return [url[0] for url in results]
+
     async def fetch_article(self, url: str) -> tuple[str, str]:
         async with self._lock:
             result = self._get_article(url)
@@ -213,6 +224,42 @@ class ArticleRepository:
                 row = cur.execute(
                     f"SELECT id, url, title, processed_html FROM articles ORDER BY id DESC LIMIT {self.cursor_type}",
                     (count,))
+
+            return row.fetchall()
+
+    async def search_articles(self, text, count, last):
+        async with self._lock:
+            text = "%" + text + "%"
+            cur = self._conn.cursor()
+            if last > 0:
+                row = cur.execute(
+                    f"""
+                    SELECT id, url, title, processed_html
+                    FROM (
+                        SELECT id, url, title, processed_html
+                        FROM articles 
+                        WHERE 
+                        (url LIKE {self.cursor_type}
+                        OR
+                        title LIKE {self.cursor_type}
+                        OR
+                        processed_html LIKE {self.cursor_type})
+                        AND 
+                        id < {self.cursor_type}
+                        ORDER BY id DESC LIMIT {self.cursor_type})
+                    """, (text, text, text, last, count))
+            else:
+                row = cur.execute(f"""
+                    SELECT id, url, title, processed_html FROM (
+                        SELECT id, url, title, processed_html, {self.cursor_type} AS text
+                        FROM articles
+                        WHERE
+                        processed_html LIKE text
+                        OR
+                        title LIKE text
+                        OR
+                        url LIKE text) ORDER BY id DESC LIMIT {self.cursor_type}
+                """, (text, count))
 
             return row.fetchall()
 

@@ -199,7 +199,7 @@
         const [url, meta] = Object.entries(a)[0];
             const link = document.createElement('a');
             link.className = 'article-link';
-            link.href = '/view?url=' + encodeURIComponent(url);
+            link.href = '/news/view?url=' + encodeURIComponent(url);
 
             const article = document.createElement('article');
             const txt = meta.processed_text;

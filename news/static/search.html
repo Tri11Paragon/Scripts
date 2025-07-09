@@ -230,7 +230,7 @@
         toggleLoader(true);
 
         try{
-            const url = new URL('/api/search', window.location.origin);
+            const url = new URL('/news/api/search', window.location.origin);
             url.searchParams.set('text',  currentQuery);
             url.searchParams.set('count', PAGE_SIZE);
             if (lastId !== undefined) url.searchParams.set('last', lastId);

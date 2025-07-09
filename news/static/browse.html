@@ -124,7 +124,7 @@
         toggleLoader(true);
 
         try{
-            const url = new URL('/api/articles', window.location.origin);
+            const url = new URL('/news/api/articles', window.location.origin);
             if (lastId !== undefined) url.searchParams.set('last', lastId);
             url.searchParams.set("count", "5")
 

@@ -218,7 +218,7 @@
     (function main(){
         const qs   = new URLSearchParams(window.location.search);
         const url  = qs.get('url');
-        const API  = '/api/view_article?url=' + encodeURIComponent(url ?? '');
+        const API  = '/news/api/view_article?url=' + encodeURIComponent(url ?? '');
 
         const elTopics     = document.getElementById('topics');
         const elSummary    = document.getElementById('summary');

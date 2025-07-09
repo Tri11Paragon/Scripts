@@ -16,50 +16,50 @@ article_repository = ArticleRepository()
 
 LOGGER = logging.getLogger("server")
 
-@app.route("/")
+@app.route("/news")
 async def index():
     return await send_from_directory("static", "index.html")
 
-@app.route("/index.html")
+@app.route("/news/index.html")
 async def index_html():
     return await index()
 
-@app.route("/view.html")
+@app.route("/news/view.html")
 async def view_html():
     return await send_from_directory("static", "view.html")
 
-@app.route("/view")
+@app.route("/news/view")
 async def view():
     return await view_html()
 
-@app.route("/browse.html")
+@app.route("/news/browse.html")
 async def browse_html():
     return await send_from_directory("static", "browse.html")
 
-@app.route("/browse")
+@app.route("/news/browse")
 async def browse():
     return await browse_html()
 
-@app.route("/search.html")
+@app.route("/news/search.html")
 async def search_html():
     return await send_from_directory("static", "search.html")
 
-@app.route("/search")
+@app.route("/news/search")
 async def search():
     return await search_html()
 
-@app.route("/api/health")
+@app.route("/news/api/health")
 async def health():
     return {"status": "ok"}
 
-@app.route("/api/article/<path:article_url>", methods=["GET"])
+@app.route("/news/api/article/<path:article_url>", methods=["GET"])
 async def get_article(article_url: str):
     article = await article_repository.get_article(article_url)
     if article is None:
         abort(404, description="Article not found")
     return jsonify(article)
 
-@app.route("/api/articles", methods=["GET"])
+@app.route("/news/api/articles", methods=["GET"])
 async def get_articles():
     count = min(int(request.args.get("count") or "25"), 125)
     last = int(request.args.get("last") or "-1")
@@ -75,7 +75,7 @@ async def get_articles():
 
     return jsonify(json_obj)
 
-@app.route("/api/search", methods=["GET"])
+@app.route("/news/api/search", methods=["GET"])
 async def search_articles():
     text = request.args.get("text")
     count = min(int(request.args.get("count") or "25"), 125)
@@ -96,7 +96,7 @@ async def search_articles():
 
     return jsonify(json_obj)
 
-@app.route("/api/view_article", methods=["GET"])
+@app.route("/news/api/view_article", methods=["GET"])
 async def view_article():
     url = request.args.get("url")
     if not url:
@@ -128,7 +128,7 @@ async def view_article():
     return jsonify(article)
 
 
-@app.route("/article-by-url", methods=["GET"])
+@app.route("/news/article-by-url", methods=["GET"])
 async def get_article_by_url():
     url = request.args.get("url")
     if not url:

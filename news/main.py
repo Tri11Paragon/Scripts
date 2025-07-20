@@ -359,24 +359,24 @@ async def on_message(message: discord.Message) -> None:
             asyncio.create_task(process_articles(message))
         return
 
-    muffin_bot.partial_clear()
-
-    if message.author.id != 199680010267656192:
-        try:
-            muffin_reply = await muffin_bot.send_message(message.content)
-        except Exception as exc:  # pragma: no cover
-            LOGGER.exception("Muffin reply failed: %s", exc)  # type: ignore[attr-defined]
-            return
-
-        await message.channel.send(muffin_reply.content())
-    else:
-        try:
-            muffin_reply = await muffin_bot.send_boss(message.content)
-        except Exception as exc:  # pragma: no cover
-            LOGGER.exception("Muffin reply failed: %s", exc)  # type: ignore[attr-defined]
-            return
-
-        await message.channel.send(muffin_reply.content())
+    # muffin_bot.partial_clear()
+    #
+    # if message.author.id != 199680010267656192:
+    #     try:
+    #         muffin_reply = await muffin_bot.send_message(message.content)
+    #     except Exception as exc:  # pragma: no cover
+    #         LOGGER.exception("Muffin reply failed: %s", exc)  # type: ignore[attr-defined]
+    #         return
+    #
+    #     await message.channel.send(muffin_reply.content())
+    # else:
+    #     try:
+    #         muffin_reply = await muffin_bot.send_boss(message.content)
+    #     except Exception as exc:  # pragma: no cover
+    #         LOGGER.exception("Muffin reply failed: %s", exc)  # type: ignore[attr-defined]
+    #         return
+    #
+    #     await message.channel.send(muffin_reply.content())
 
 
     is_dm = message.guild is None

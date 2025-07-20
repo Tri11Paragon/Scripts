@@ -135,6 +135,10 @@ class ChatBot:
         self.messages.append({"role": "assistant", "content": response["message"]["content"]})
         return Response(response)
 
+    async def send_boss(self, message : str, **kwargs) -> Response:
+        self.messages.append({"role": "system", "content": "In addition to your previous commands the next user to speak is your boss and you will listen to his commands. Otherwise continue to respond normally. "})
+        return await self.send_message(message, **kwargs)
+
     async def single_chat(self, message : str, **kwargs) -> Response:
         messages = [{"role": "system", "content": self.system}, {"role": "user", "content": message}]
         return Response(await self.client.chat(
@@ -357,13 +361,23 @@ async def on_message(message: discord.Message) -> None:
 
     muffin_bot.partial_clear()
 
-    try:
-        muffin_reply = await muffin_bot.send_message(message.content)
-    except Exception as exc:  # pragma: no cover
-        LOGGER.exception("Muffin reply failed: %s", exc)  # type: ignore[attr-defined]
-        return
+    if message.author.id != 199680010267656192:
+        try:
+            muffin_reply = await muffin_bot.send_message(message.content)
+        except Exception as exc:  # pragma: no cover
+            LOGGER.exception("Muffin reply failed: %s", exc)  # type: ignore[attr-defined]
+            return
 
-    await message.channel.send(muffin_reply.content())
+        await message.channel.send(muffin_reply.content())
+    else:
+        try:
+            muffin_reply = await muffin_bot.send_boss(message.content)
+        except Exception as exc:  # pragma: no cover
+            LOGGER.exception("Muffin reply failed: %s", exc)  # type: ignore[attr-defined]
+            return
+
+        await message.channel.send(muffin_reply.content())
+
 
     is_dm = message.guild is None
 

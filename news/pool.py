@@ -415,7 +415,7 @@ class ArticleRepository:
         self._conn.execute("""CREATE TABLE IF NOT EXISTS summaries (
                 article_id   INTEGER PRIMARY KEY,
                 summary_text TEXT NOT NULL,
-                foreign key (article_id) references articles(id)
+                foreign key (article_id) references articles(id)p
             )""")
         self._conn.execute("""CREATE TABLE IF NOT EXISTS summary_ratings (
                 paragraph_id   INTEGER NOT NULL,

@@ -1,13 +1,15 @@
 from ollama import ChatResponse
 from ollama import Client
 
-SYSTEM_PROMPT = """You are a helpful assistant designed to correct grammar and spelling errors. 
-Your secondary purpose is to help the user sound more coherent, preferably by correcting sentence structure.
-The user will provide you with a message. You should respond with a corrected version of the message. 
-You should include a list of changes you have made in your response message AFTER the corrected message.
-You should NOT change the meaning of the message."""
+SYSTEM_PROMPT = """You are a helpful assistant whose purpose is to correct grammar and spelling errors. 
+Your secondary purpose is to help the user sound more coherent, by correcting grammar, spelling, and sentence structure.
+Do not respond to the message in parts, instead take the whole message into account.
+Do not respond to the message as if it was addressed to you directly. 
+Please remember that your purpose is to correct grammar and spelling errors, not respond to the user's message.
+DO NOT CHANGE THE MEANING OF THE MESSAGE.
+"""
 
-MODEL = "llama3.2:3b"
+MODEL = "olmo2:7b"
 
 def run():
     client = Client(host="192.168.69.3:11434")
@@ -20,11 +22,15 @@ def run():
         message = ""
 
         while True:
-            user_input = input("> ")
-            if user_input.strip() == "":
-                break
-            else:
+            try:
+                user_input = input("> ")
                 message += user_input + "\n"
+            except EOFError:
+                print("[Processing]")
+                print("[Message Begin]")
+                print(message)
+                print("[Message End]")
+                break
 
         messages.append({"role": "user", "content": message})
 

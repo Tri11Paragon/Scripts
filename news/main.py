@@ -21,6 +21,7 @@ from ollama import AsyncClient
 import time
 import json
 import server
+import camera
 import threading
 from typing import NoReturn
 import collections
@@ -422,8 +423,9 @@ async def main():
     try:
         web_task = asyncio.create_task(server.app.run_task(host="0.0.0.0", port=8000, debug=False))
         discord_task = asyncio.create_task(start_discord())
+        camera_task = asyncio.create_task(camera.run())
 
-        await asyncio.wait({web_task, discord_task}, return_when=asyncio.FIRST_COMPLETED)
+        await asyncio.wait({web_task, discord_task, camera_task}, return_when=asyncio.FIRST_COMPLETED)
     finally:
         # await PlaywrightPool.stop()
         server.article_repository.close()

@@ -1,6 +1,10 @@
 let
-  pkgs = import <nixpkgs> {};
+  pkgs = import <nixpkgs> {config.allowUnfree = true;};
 in pkgs.mkShell {
+  nativeBuildInputs = with pkgs; [
+    playwright-driver.browsers
+  ];
+
   packages = with pkgs; [
     (python3.withPackages (python-pkgs: with python-pkgs; [
       ollama
@@ -11,6 +15,14 @@ in pkgs.mkShell {
       playwright
 	  flask
 	  quart
+	  transformers
+	  datasets
+      sentencepiece
+      torchWithRocm
+      huggingface-hub
+      hf-xet
+	  pip
+	  (opencv4.override { enableGtk2 = true; enableFfmpeg = true; enableGStreamer = true; enableJPEG = true; ffmpeg = pkgs.ffmpeg-full; })
     ]))
   ];
   propagatedBuildInputs = with pkgs; [

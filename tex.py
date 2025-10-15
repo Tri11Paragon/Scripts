@@ -181,7 +181,7 @@ def main():
         f.write("")
 
     if args.open:
-        os.system("nohup texstudio --start-always --no-session --master \"" + slugify(args.name) + ".tex\" \"chapters/writeup.tex\" >/dev/null 2>&1 < /dev/null & disown")
+        os.system("nohup texstudio --start-always --no-session --master \"" + slugify(args.name) + ".tex\" \"chapters/writeup.tex\" >/dev/null 2>&1 < /dev/null &")
 
 
 if __name__ == "__main__":

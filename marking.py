@@ -6,6 +6,27 @@ import shutil
 import re
 import subprocess
 
+BROCK_JAR_PATH = "/home/brett/Documents/Brock/Teaching/1P02 Fall 2025/Assignment Marking/Assignment 3/brock-v-1-0-17.jar"
+RUNNER_COMMAND = ["java", "-jar", Path(__file__).resolve().parent / "RunBlueJ.jar", BROCK_JAR_PATH]
+OPEN_IN_BLUEJ = False
+FILE_BROWSER = ["dolphin"]
+EDITOR = ["kate"]
+
+def open_folder(folder):
+    run_command = FILE_BROWSER
+    run_command.append(folder.absolute())
+    subprocess.run(run_command)
+
+def open_editor(file):
+    run_command = EDITOR
+    run_command.append(file.absolute())
+    subprocess.run(run_command)
+
+def run_java_file(file):
+    run_command = RUNNER_COMMAND
+    run_command.append(file.absolute())
+    subprocess.run(run_command, cwd=file.parent)
+
 def process_zip(path):
     print(f"Processing file: '{path}'")
     folder = path.parent / Path(path.stem)
@@ -17,22 +38,31 @@ def process_zip(path):
     for file in folder.glob("**/*.java"):
         if "__MACOSX" in str(file.parent):
             continue
-        subprocess.run(["kate", file])
+        open_editor(file)
         kate = True
+        if BROCK_JAR_PATH:
+            class_path = file.with_suffix(".class")
+            if class_path.exists():
+                print(f"Removing old class file: {class_path}")
+                class_path.unlink()
+            subprocess.run(["javac", "-cp", BROCK_JAR_PATH, str(file)])
+            if not OPEN_IN_BLUEJ:
+                run_java_file(class_path)
 
-    bluej = False
-    for file in folder.glob("**/*.bluej"):
-        if "__MACOSX" in str(file.parent):
-            continue
-        subprocess.run(["bluej", str(file)])
-        bluej = True
+    if OPEN_IN_BLUEJ:
+        bluej = False
+        for file in folder.glob("**/*.bluej"):
+            if "__MACOSX" in str(file.parent):
+                continue
+            subprocess.run(["bluej", str(file)])
+            bluej = True
 
-    if not bluej:
-        print("No .bluej files found?")
+        if not bluej:
+            print("No .bluej files found?")
+            open_folder(folder)
     if not kate:
         print("No .java files found?")
-    if not bluej or not kate:
-        subprocess.run(["dolphin", folder])
+        open_folder(folder)
 
 def process_java(path):
     pass

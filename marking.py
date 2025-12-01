@@ -27,12 +27,13 @@ def run_java_file(file):
     run_command.append(file.absolute())
     subprocess.run(run_command, cwd=file.parent)
 
-def process_zip(path):
+def process_zip(path, allow_duplicates):
     print(f"Processing file: '{path}'")
     folder = path.parent / Path(path.stem)
-    folder.mkdir(exist_ok=True)
-    shutil.unpack_archive(path, folder)
-    print(f"Unpacked to '{folder}'")
+    if not folder.exists() or allow_duplicates:
+        folder.mkdir(exist_ok=True)
+        shutil.unpack_archive(path, folder)
+        print(f"Unpacked to '{folder}'")
 
     kate = False
     for file in folder.glob("**/*.java"):
@@ -69,6 +70,8 @@ def process_java(path):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--allow-duplicates", dest="d", action="store_true", default=False,
+                        help="Providing this flag will cause the program to unzip the archive even if the corresponding folder exists")
     parser.add_argument("zip", help="The zip file to mark.")
     args = parser.parse_args()
 
@@ -78,9 +81,9 @@ def main():
     name = path.suffix
 
     if name == ".zip":
-        process_zip(path)
+        process_zip(path, args.d)
     else:
-        process_zip(Path(str(path) + ".zip"))
+        process_zip(Path(str(path) + ".zip"), args.d)
 
 if __name__ == "__main__":
     try:

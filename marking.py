@@ -6,7 +6,7 @@ import shutil
 import re
 import subprocess
 
-BROCK_JAR_PATH = "/home/brett/Documents/Brock/Teaching/brock-v-1-0-27.jar"
+BROCK_JAR_PATH = "/home/brett/Documents/Brock/Teaching/brock-v-1-0-28.jar"
 RUNNER_COMMAND = ["java", "-jar", Path(__file__).resolve().parent / "RunBlueJ.jar", BROCK_JAR_PATH]
 OPEN_IN_BLUEJ = False
 OPEN_IMAGES = True
@@ -17,23 +17,23 @@ EDITOR = ["kate"]
 def open_folder(folder):
     run_command = FILE_BROWSER.copy()
     run_command.append(folder.absolute())
-    subprocess.run(run_command)
+    subprocess.Popen(run_command)
 
 def open_image_pdf(file):
     run = ["xdg-open", file.absolute()]
-    subprocess.run(run)
+    subprocess.Popen(run)
 
 def open_editor(files):
     run_command = EDITOR.copy()
     for file in files:
         run_command.append(file.absolute())
-    subprocess.run(run_command)
+    subprocess.Popen(run_command)
 
 def run_java_file(file, files):
     run_command = RUNNER_COMMAND.copy()
     run_command.append(file.absolute())
     run_command.extend(files)
-    subprocess.run(run_command, cwd=file.parent)
+    subprocess.Popen(run_command, cwd=file.parent)
 
 def glob_picture(folder, pattern):
     found = False

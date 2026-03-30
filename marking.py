@@ -7,21 +7,36 @@ import re
 import subprocess
 
 BROCK_JAR_PATH = "/home/brett/Documents/Brock/Teaching/brock-v-1-0-28.jar"
-RUNNER_COMMAND = ["java", "-jar", Path(__file__).resolve().parent / "RunBlueJ.jar", BROCK_JAR_PATH]
+
 OPEN_IN_BLUEJ = False
 OPEN_IMAGES = True
 OPEN_EDITOR = True
 FILE_BROWSER = ["dolphin"]
 EDITOR = ["kate"]
 
+
+def build_running_command(file, files):
+    command = ["java", "-jar", str(Path(__file__).resolve().parent / "Run1P03.jar"),
+               str(file.absolute()), BROCK_JAR_PATH] + files
+    return command
+
+
+def get_package_name(java_file: Path) -> str | None:
+    text = java_file.read_text(encoding="utf-8")
+    m = re.search(r'package\s+([a-zA-Z_][\w.]*)\s*;', text, re.MULTILINE)
+    return m.group(1) if m else None
+
+
 def open_folder(folder):
     run_command = FILE_BROWSER.copy()
     run_command.append(folder.absolute())
     subprocess.Popen(run_command)
 
+
 def open_image_pdf(file):
     run = ["xdg-open", file.absolute()]
     subprocess.Popen(run)
+
 
 def open_editor(files):
     run_command = EDITOR.copy()
@@ -29,11 +44,12 @@ def open_editor(files):
         run_command.append(file.absolute())
     subprocess.Popen(run_command)
 
+
 def run_java_file(file, files):
-    run_command = RUNNER_COMMAND.copy()
-    run_command.append(file.absolute())
-    run_command.extend(files)
+    run_command = build_running_command(file, files)
+    print(f"Running command: {run_command}")
     subprocess.Popen(run_command, cwd=file.parent)
+
 
 def glob_picture(folder, pattern):
     found = False
@@ -43,6 +59,7 @@ def glob_picture(folder, pattern):
         open_image_pdf(file)
         found = True
     return found
+
 
 def process_zip(path, allow_duplicates):
     print(f"Processing file: '{path}'")
@@ -58,7 +75,7 @@ def process_zip(path, allow_duplicates):
     for file in folder.glob("**/*.java"):
         if "__MACOSX" in str(file.parent):
             continue
-#        open_editor(file)
+        #        open_editor(file)
         kate = True
         if BROCK_JAR_PATH:
             files.append(file)
@@ -82,14 +99,29 @@ def process_zip(path, allow_duplicates):
 
     print("Compiling Java Files")
     subprocess.run(["javac", "-cp", BROCK_JAR_PATH] + [str(file) for file in files])
+    out_dir = Path(folder / "build").absolute()
+    out_dir.mkdir(exist_ok=True)
+    file_packages = []
+    for file in files:
+        package = get_package_name(file)
+        if not package:
+            package = ""
+        else:
+            package = package.replace(".", "/")
+        package_dir = out_dir / Path(package)
+        package_dir.mkdir(exist_ok=True, parents=True)
+        print(f"Copying class file {file} to {out_dir / package}")
+
+        shutil.copy(file.with_suffix(".class"), out_dir / package)
+        file_packages.append(out_dir / package / file.with_suffix(".class").name)
     print("Running Java Files")
     if OPEN_EDITOR:
         open_editor(files)
     if not OPEN_IN_BLUEJ:
-        for file in files:
+        for file in file_packages:
             print(f"Trying to run file {file}")
             class_path = file.with_suffix(".class")
-            run_java_file(class_path, [str(file.parent) + "/"])
+            run_java_file(class_path, [str(out_dir)])
 
     if OPEN_IN_BLUEJ:
         bluej = False
@@ -106,8 +138,10 @@ def process_zip(path, allow_duplicates):
         print("No .java files found?")
         open_folder(folder)
 
+
 def process_java(path):
     pass
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -140,6 +174,7 @@ def main():
         process_zip(path, args.d)
     else:
         process_zip(Path(str(path) + ".zip"), args.d)
+
 
 if __name__ == "__main__":
     try:

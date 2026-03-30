@@ -50,7 +50,6 @@ def run_java_file(file, files):
     print(f"Running command: {run_command}")
     subprocess.Popen(run_command, cwd=file.parent)
 
-
 def glob_picture(folder, pattern):
     found = False
     for file in folder.glob(pattern):
@@ -97,31 +96,35 @@ def process_zip(path, allow_duplicates):
             print("Unable to find any pseudocode pictures")
             open_folder(folder)
 
-    print("Compiling Java Files")
-    subprocess.run(["javac", "-cp", BROCK_JAR_PATH] + [str(file) for file in files])
-    out_dir = Path(folder / "build").absolute()
-    out_dir.mkdir(exist_ok=True)
-    file_packages = []
-    for file in files:
-        package = get_package_name(file)
-        if not package:
-            package = ""
-        else:
-            package = package.replace(".", "/")
-        package_dir = out_dir / Path(package)
-        package_dir.mkdir(exist_ok=True, parents=True)
-        print(f"Copying class file {file} to {out_dir / package}")
-
-        shutil.copy(file.with_suffix(".class"), out_dir / package)
-        file_packages.append(out_dir / package / file.with_suffix(".class").name)
-    print("Running Java Files")
     if OPEN_EDITOR:
         open_editor(files)
-    if not OPEN_IN_BLUEJ:
-        for file in file_packages:
-            print(f"Trying to run file {file}")
-            class_path = file.with_suffix(".class")
-            run_java_file(class_path, [str(out_dir)])
+
+    print("Compiling Java Files")
+    subprocess.run(["javac", "-cp", BROCK_JAR_PATH] + [str(file) for file in files])
+    try:
+        out_dir = Path(folder / "build").absolute()
+        out_dir.mkdir(exist_ok=True)
+        file_packages = []
+        for file in files:
+            package = get_package_name(file)
+            if not package:
+                package = ""
+            else:
+                package = package.replace(".", "/")
+            package_dir = out_dir / Path(package)
+            package_dir.mkdir(exist_ok=True, parents=True)
+            print(f"Copying class file {file} to {out_dir / package}")
+
+            shutil.copy(file.with_suffix(".class"), out_dir / package)
+            file_packages.append(out_dir / package / file.with_suffix(".class").name)
+        print("Running Java Files")
+        if not OPEN_IN_BLUEJ:
+            for file in file_packages:
+                print(f"Trying to run file {file}")
+                class_path = file.with_suffix(".class")
+                run_java_file(class_path, [str(out_dir)])
+    except Exception as e:
+        print(f"Error running Java files: {e}")
 
     if OPEN_IN_BLUEJ:
         bluej = False
